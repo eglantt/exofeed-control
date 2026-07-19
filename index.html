@@ -1,0 +1,2082 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ExoFeed Control v1.5.5</title>
+
+    <!-- PWA: установка на главный экран (Android/iOS) -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1565c0">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ExoFeed">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <style>
+        :root {
+            --bg: #121212; --card: #1e1e1e; --text: #e0e0e0;
+            --blue: #1565c0; --green: #2e7d32; --red: #c62828; --gold: #ff8f00;
+            --purple: #6a1b9a; --border: #333;
+        }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px 10px 80px; user-select: none; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .version-tag { font-size: 0.7rem; color: #777; margin-bottom: 15px; }
+        .clock-row {
+            display: flex; justify-content: space-between; align-items: center;
+            background: #252525; border: 1px solid #3a3a3a; border-radius: 8px;
+            padding: 8px 12px; margin: 8px 0; cursor: pointer;
+            font-weight: bold; font-size: 0.85rem; color: #eee;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .clock-row:active { background: #2a2a3a; border-color: var(--blue); }
+        .clock-row span { font-variant-numeric: tabular-nums; }
+        .lock-btn { padding: 8px 15px; border-radius: 20px; border: 1px solid var(--border); cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+
+        /* Индикация инженерного режима (v1.5.3): баннер сверху + подсветка рамок локаций/стеллажей */
+        .engineer-banner {
+            display: none; background: #412402; border: 1px solid var(--gold); color: #FAC775;
+            font-size: 0.8rem; font-weight: bold; text-align: center;
+            padding: 8px 10px; border-radius: 6px; margin: 8px 0;
+        }
+        body.engineer-mode .engineer-banner { display: block; }
+        body.engineer-mode .location { border: 2px dashed var(--gold); background: #2a2410; }
+        body.engineer-mode .block-unit { border: 2px dashed var(--gold); background: #2a2410; }
+        .lock-btn.unlocked { background: var(--red); color: white; }
+        .lock-btn.locked { background: var(--green); color: white; }
+
+        .location { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 25px; border: 1px solid var(--border); }
+        .location-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; }
+        .loc-collapse-arrow { font-size: 0.9rem; color: #888; flex-shrink: 0; width: 14px; text-align: center; }
+        .loc-summary-collapsed { font-size: 0.78rem; color: #999; cursor: pointer; padding: 2px 0 2px 22px; }
+        .loc-actions { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+        
+        .block-unit { 
+            background: #252525; border-radius: 8px; padding: 10px; margin-bottom: 15px; border: 1px solid #333;
+        }
+        .block-header { font-size: 0.9rem; font-weight: bold; color: var(--blue); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* Весь стеллаж скроллится как единое целое: колонки (адреса мест) у всех рядов выровнены */
+        .rack { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+        .rack-inner { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 100%; box-sizing: border-box; }
+        .shelf-row { 
+            display: flex; align-items: stretch; gap: 6px; 
+            position: relative;
+        }
+        .row-label { 
+            flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-size: 0.7rem; color: #777; font-weight: bold; min-width: 22px; text-align: center; gap: 4px;
+            position: sticky; left: 0; background: #252525; z-index: 2;
+        }
+        .row-del-btn { background: none; border: none; color: var(--red); font-size: 0.9rem; cursor: pointer; padding: 0; }
+        .add-row-btn, .add-cell-btn { 
+            background: #2a2a2a; border: 1px dashed #555; border-radius: 4px; color: #888; 
+            display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.8rem; font-weight: bold;
+        }
+        .add-cell-btn { flex: 0 0 auto; min-width: 60px; min-height: 68px; }
+        .add-row-btn { padding: 10px; margin-top: 2px; }
+        .add-row-btn:active, .add-cell-btn:active { background: #333; }
+        
+        .cell { 
+            background: #2a2a2a; border: 1px solid #444; border-radius: 4px; 
+            min-height: 68px; min-width: calc(105px * var(--cw, 1)); flex: 0 0 calc(105px * var(--cw, 1)); /* Ширина = базовая x пресет */
+            display: flex; flex-direction: column; padding: 6px; 
+            position: relative; cursor: pointer; justify-content: space-between;
+            box-sizing: border-box;
+            overflow: hidden; 
+            touch-action: manipulation;
+            transition: transform 0.1s, opacity 0.1s;
+        }
+        .cell.occupied { border-color: var(--blue); background: #2d2d2d; }
+        
+        .cell.fed-mode { background: #1b5e20 !important; border-color: #4caf50 !important; }
+        .cell.shedding-mode { border-left: 5px solid #29b6f6 !important; }
+        .cell.night-feed-mode { border-right: 5px solid var(--gold) !important; }
+
+        .cell.service-cell { background: repeating-linear-gradient(45deg, #262626, #262626 8px, #2f2f2f 8px, #2f2f2f 16px); border-style: dashed; border-color: #666; cursor: default; }
+        .cell.service-cell .cell-info { color: #888; }
+
+        body.engineer-mode .cell { touch-action: none; cursor: grab; }
+        .cell.dragging { opacity: 0.4; transform: scale(0.95); z-index: 5; }
+        .cell.drag-over { border: 2px dashed var(--gold) !important; background: #3a3a1f !important; }
+        
+        .cell-num { font-size: 0.65rem; color: #888; font-weight: bold; }
+        .cell-label { font-size: 0.68rem; color: #7fb8ff; font-style: italic; margin-top: 1px; }
+        
+        .cell-info { 
+            font-size: 0.72rem; font-weight: bold; line-height: 1.2; margin-top: 2px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2; 
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: break-word;
+        }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; overflow-y: auto; }
+        .modal-content { background: var(--card); margin: 10px auto; padding: 20px; width: 92%; max-width: 500px; border-radius: 15px; box-sizing: border-box; position: relative; }
+        
+        .form-group { margin-bottom: 12px; position: relative; }
+        label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 4px; }
+        input, select { width: 100%; background: #2a2a2a; border: 1px solid var(--border); color: #fff; padding: 12px; border-radius: 8px; box-sizing: border-box; font-size: 0.95rem; }
+        
+        .btn-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .btn-opt { background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 6px; cursor: pointer; text-align: center; font-weight: bold; }
+        .btn-opt.active { background: var(--blue); border-color: #5ea3ff; }
+
+        .btn-main { background: var(--blue); color: white; width: 100%; padding: 14px; border-radius: 8px; border: none; font-weight: bold; margin-top: 10px; font-size: 1rem; }
+        .btn-sec { background: #444; color: white; width: 100%; padding: 12px; border-radius: 8px; border: none; margin-top: 8px; font-size: 0.9rem; }
+        .btn-del { background: var(--red); color: white; padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.75rem; font-weight: bold; }
+        
+        .num-helper { background: #333; border: 1px solid #555; color: #fff; padding: 6px 12px; border-radius: 6px; display: inline-block; margin-bottom: 10px; font-size: 0.85rem; cursor: pointer; }
+
+        .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: #1a1a1a; display: flex; justify-content: space-around; padding: 12px 0; border-top: 1px solid var(--border); z-index: 900; }
+        .nav-item { font-weight: bold; color: #aaa; cursor: pointer; font-size: 0.85rem; padding: 5px 10px; }
+        
+        .animal-item { background: #333; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid var(--blue); position: relative; }
+        .animal-badge { display: inline-block; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px; }
+        
+        .status-tag { display: inline-block; font-size: 0.65rem; font-weight: bold; padding: 3px 6px; border-radius: 4px; color: #fff; text-transform: uppercase; }
+        .status-tag.fed { background: var(--green); }
+        .status-tag.hungry { background: var(--red); }
+
+        .history-box { background: #252525; padding: 10px; border-radius: 6px; font-size: 0.8rem; margin-top: 8px; border: 1px solid #444; max-height: 260px; overflow-y: auto; }
+        .log-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding: 6px 0; gap: 6px; }
+        .log-row:last-child { border-bottom: none; }
+        .night-resolve-box { background:#ff8f0022; border:1px solid var(--gold); padding:10px; border-radius:8px; margin-top:8px; }
+
+        /* Предпросмотр HTML-отчётов внутри приложения (сам скачиваемый файл стилизуется отдельно, светлой темой) */
+        .rep-preview { max-height: 60vh; overflow-y: auto; margin-bottom: 12px; }
+        .rep-preview h3 { color: var(--gold); margin-top: 18px; margin-bottom: 6px; font-size: 0.95rem; }
+        table.rep-table { border-collapse: collapse; width: 100%; margin-bottom: 14px; font-size: 0.78rem; }
+        table.rep-table th, table.rep-table td { border: 1px solid #444; padding: 5px 7px; text-align: left; }
+        table.rep-table th { background: #2a2a2a; color: #aaa; }
+
+        /* --- Календарь (v1.5.2) --- */
+        .cal-month-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
+        .cal-month-nav button { width: auto; flex: 0 0 auto; }
+        .cal-month-nav span { flex: 1; text-align: center; }
+        .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 0.7rem; color: #888; margin-bottom: 4px; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 12px; }
+        .cal-day {
+            aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+            border-radius: 6px; border: 2px solid transparent; font-size: 0.8rem; cursor: pointer;
+            background: #2a2a2a;
+        }
+        .cal-day.cal-empty { background: transparent; cursor: default; }
+        .cal-day.cal-today { border-style: solid; border-color: #666; }
+        .cal-day.cal-future { color: #555; cursor: default; background: transparent; }
+        .cal-legend { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 0.78rem; }
+        .cal-legend-item { display: flex; align-items: center; gap: 8px; }
+        .cal-legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 3px solid #444; flex-shrink: 0; }
+
+        /* Плашка режима просмотра стеллажа по дате + легенда из 5 цветов */
+        .cal-preview-banner { background: #2a2a1f; border: 1px solid var(--gold); border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+        .cal-preview-banner .cal-legend { flex-direction: row; flex-wrap: wrap; gap: 10px; margin: 8px 0 0; margin-bottom: 0; }
+        .cal-preview-banner .cal-legend-item { font-size: 0.7rem; }
+        .cal-preview-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+        /* Bottom sheet — выезжает снизу экрана (мобильный паттерн), в отличие от центрированных модалок.
+           display:flex устанавливается через JS в showModal() (см. ниже), а не через общий showModal('block') */
+        .modal.sheet-modal { align-items: flex-end; }
+        .sheet-content { width: 100%; max-width: 500px; margin: 0 auto; border-radius: 16px 16px 0 0; animation: sheetSlideUp 0.2s ease-out; }
+        @keyframes sheetSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .sheet-handle { width: 40px; height: 4px; background: #555; border-radius: 2px; margin: 0 auto 12px; }
+        .sheet-body { max-height: 50vh; overflow-y: auto; }
+        .sheet-row { background: #252525; border-radius: 6px; padding: 10px; margin-bottom: 8px; font-size: 0.82rem; cursor: pointer; }
+        .sheet-row:last-child { margin-bottom: 0; }
+        .sheet-row div { margin-top: 3px; }
+
+        .autocomplete-suggestions { 
+            position: absolute; top: 100%; left: 0; width: 100%; 
+            background: #2a2a2a; border: 2px solid var(--blue); border-radius: 8px; 
+            max-height: 200px; overflow-y: auto; z-index: 2000; box-shadow: 0 8px 24px rgba(0,0,0,0.8); box-sizing: border-box;
+        }
+        .suggestion-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #3c3c3c; font-size: 0.9rem; background: #2a2a2a; color: #fff; }
+        .suggestion-item:hover { background: #343434; }
+        
+        .stat-table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; }
+        .stat-table th, .stat-table td { padding: 10px; border: 1px solid #444; text-align: left; font-size: 0.85rem; }
+        .stat-table th { background: #252525; color: var(--blue); }
+
+        .checkbox-row { display: flex; align-items: center; gap: 10px; background: #2a2a2a; padding: 12px; border-radius: 6px; margin-bottom: 6px; }
+        .checkbox-row input { width: auto; margin: 0; }
+
+        .edit-ui { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h3 style="color:var(--blue); margin:0;">ExoFeed Control</h3>
+    <div id="lock-status" class="lock-btn locked" onclick="toggleLock()">🔒 РАБОТА</div>
+</div>
+<div style="text-align:right; margin-top:-8px;">
+    <span onclick="resetEngineerPin()" style="font-size:0.68rem; color:#777; cursor:pointer; text-decoration:underline;">Забыли PIN?</span>
+</div>
+<div id="engineer-banner" class="engineer-banner">🔓 ИНЖЕНЕРНЫЙ РЕЖИМ АКТИВЕН</div>
+<div id="clock-row" class="clock-row" onclick="openGeneralCalendar()">
+    <span id="clock-date">📅 —</span>
+    <span id="clock-time">--:--:--</span>
+</div>
+<div class="version-tag">v1.5.5-alpha | Almaty Zoo Edition</div>
+
+<div id="app"></div>
+
+<div id="modal-location" class="modal">
+    <div class="modal-content">
+        <h4 id="loc-modal-title">Локация</h4>
+        <input type="text" id="loc-name" placeholder="Название (напр. 3 этаж)">
+        <button class="btn-main" onclick="saveLocation()">Сохранить</button>
+        <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-block" class="modal">
+    <div class="modal-content">
+        <h4 id="block-modal-title">Место содержания</h4>
+        <div class="num-helper" onclick="insertNumSign()">Вставить №</div>
+        <div class="form-group"><label>Название</label><input type="text" id="block-name" placeholder="Стеллаж №1"></div>
+        <div class="form-group">
+            <label>Тип</label>
+            <select id="block-type">
+                <option>Террариум</option><option>Вольер</option><option>Контейнер</option><option>Таз</option><option>Аквариум</option>
+            </select>
+        </div>
+        <div id="block-geo-inputs">
+            <div class="btn-group">
+                <div class="form-group"><label>Полок (рядов)</label><input type="number" id="block-rows" value="1"></div>
+                <div class="form-group"><label>Мест на полке</label><input type="number" id="block-cols" value="1"></div>
+            </div>
+        </div>
+        <button class="btn-main" onclick="saveBlock()">Сохранить блок</button>
+        <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-cell" class="modal">
+    <div class="modal-content">
+        <h4 id="cell-title-ui">Место</h4>
+        <div class="edit-ui">
+            <label>Подпись ячейки (необязательно)</label>
+            <input type="text" id="cell-label-edit" placeholder="Напр: клетка Багиры" onchange="updateCellLabel()">
+        </div>
+        <div class="edit-ui" style="display:flex; gap:10px; margin-bottom:10px;">
+            <div style="flex:1;">
+                <label>Ширина места</label>
+                <select id="cell-width-edit" onchange="updateCellWidth()">
+                    <option value="0.5">0.5x</option>
+                    <option value="1">1x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2x</option>
+                    <option value="2.5">2.5x</option>
+                    <option value="3">3x</option>
+                </select>
+            </div>
+            <div style="flex:1; display:flex; align-items:flex-end;">
+                <label style="display:flex; align-items:center; gap:6px; font-weight:normal; margin:0;">
+                    <input type="checkbox" id="cell-service-edit" onchange="toggleCellService()" style="width:auto;"> Сервисное место
+                </label>
+            </div>
+        </div>
+        <button class="btn-del edit-ui" style="width:100%; padding:10px; margin-bottom:10px;" onclick="deleteCurrentCell()">🗑 Удалить эту ячейку</button>
+        <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+
+        <div id="animals-list"></div>
+        
+        <div id="cell-animal-actions" style="display:flex; gap:6px; margin-top:10px;">
+            <button class="btn-main" id="cell-bulk-feed-btn" style="background:var(--purple); margin:0;" onclick="openBulkFeedForm()">🍖 КОРМЛЕНИЕ</button>
+            <button class="btn-main edit-ui" style="margin:0;" onclick="openAnimalForm(null)">+ Заселить особь</button>
+        </div>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
+    </div>
+</div>
+
+<div id="modal-animal-form" class="modal">
+    <div class="modal-content">
+        <h4 id="animal-form-title">Паспорт особи</h4>
+        <div class="form-group">
+            <label>Вид (начните ввод названия)</label>
+            <input type="text" id="a-species" placeholder="Напр: Кобра" autocomplete="off" oninput="handleSpeciesInput(this)" onblur="hideSuggestionsWithDelay()">
+            <div id="species-suggestions" class="autocomplete-suggestions" style="display:none;"></div>
+        </div>
+        <div class="form-group">
+            <label>Пол</label>
+            <div class="btn-group">
+                <div class="btn-opt g-opt" id="g-opt-m" data-val="♂" onclick="selectOpt(this, 'g-opt')">♂</div>
+                <div class="btn-opt g-opt" id="g-opt-f" data-val="♀" onclick="selectOpt(this, 'g-opt')">♀</div>
+                <div class="btn-opt g-opt" id="g-opt-u" data-val="○" onclick="selectOpt(this, 'g-opt')">○</div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Стадия возраста</label>
+            <div class="btn-group">
+                <div class="btn-opt a-opt" id="a-opt-j" data-val="Juv." onclick="selectOpt(this, 'a-opt')">Juv.</div>
+                <div class="btn-opt a-opt" id="a-opt-s" data-val="Sub." onclick="selectOpt(this, 'a-opt')">Sub.</div>
+                <div class="btn-opt a-opt" id="a-opt-a" data-val="Ad." onclick="selectOpt(this, 'a-opt')">Ad.</div>
+            </div>
+        </div>
+        <div style="background:#252525; padding:10px; border-radius:8px; margin-bottom:12px;">
+            <label style="font-weight:bold; color:#fff;">Дата рождения (если известна)</label>
+            <div style="display:flex; gap:6px; margin-top:5px;">
+                <select id="a-birth-month">
+                    <option value="">-- Месяц --</option>
+                    <option value="0">Январь</option><option value="1">Февраль</option><option value="2">Март</option>
+                    <option value="3">Апрель</option><option value="4">Май</option><option value="5">Июнь</option>
+                    <option value="6">Июль</option><option value="7">Август</option><option value="8">Сентябрь</option>
+                    <option value="9">Октябрь</option><option value="10">Ноябрь</option><option value="11">Декабрь</option>
+                </select>
+                <select id="a-birth-year">
+                    <option value="">-- Год --</option>
+                    <script>
+                        for(let y=2026; y>=2010; y--) document.write(`<option value="${y}">${y}</option>`);
+                    </script>
+                </select>
+            </div>
+        </div>
+        <button class="btn-main" onclick="saveAnimal()">Сохранить изменения</button>
+        <button class="btn-sec" onclick="document.getElementById('modal-animal-form').style.display='none'">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-bulk-feed-select" class="modal">
+    <div class="modal-content">
+        <h4>Кого покормить?</h4>
+        <div id="bulk-feed-checkboxes"></div>
+        <button class="btn-main" onclick="proceedToFeedForm()">Далее к выбору корма</button>
+        <button class="btn-sec" onclick="document.getElementById('modal-bulk-feed-select').style.display='none'">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-feed" class="modal">
+    <div class="modal-content">
+        <h4>Параметры корма</h4>
+        <div class="form-group">
+            <label>Тип кормового объекта</label>
+            <select id="feed-type" onchange="renderFeedSizes()">
+                <option value="RATS">Крыса</option>
+                <option value="MICE">Мышь</option>
+                <option value="RABBITS">Кролик</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Размер КО (выберите номер)</label>
+            <select id="feed-size"></select>
+        </div>
+        <div class="form-group">
+            <label>Количество (шт на ОДНУ особь)</label>
+            <input type="number" id="feed-count" value="1" min="1">
+        </div>
+        <div style="background:#252525; padding:12px; border-radius:8px; margin-bottom:12px;">
+            <label style="color:#fff; font-weight:bold;">Режим раздачи</label>
+            <div class="checkbox-row" style="background:transparent; padding:5px 0; margin:0;">
+                <input type="checkbox" id="feed-night-mode"> <label for="feed-night-mode" style="margin:0; color:var(--gold);">Оставить на ночь (контроль утром)</label>
+            </div>
+        </div>
+        <button class="btn-main" onclick="saveFeeding()">Записать кормление</button>
+        <button class="btn-sec" onclick="document.getElementById('modal-feed').style.display='none'">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-shedding" class="modal">
+    <div class="modal-content">
+        <h4>Регистрация линьки</h4>
+        <button class="btn-main" style="background:#29b6f6" onclick="setSheddingStatus('Помутнение')">🔹 Помутнение глаз (ожидается линька через 3-5 дн.)</button>
+        <button class="btn-main" style="background:var(--green)" onclick="setSheddingStatus('Норма')">✔️ Полинял полностью (Выползок)</button>
+        <button class="btn-main" style="background:var(--gold)" onclick="setSheddingStatus('Кусками')">⚠️ Полинял частично (Кусками)</button>
+        <button class="btn-main" style="background:var(--purple)" onclick="setSheddingStatus('Вручную')">🤲 Потребовалась помощь (Вручную)</button>
+        <button class="btn-sec" onclick="document.getElementById('modal-shedding').style.display='none'">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-transfer" class="modal">
+    <div class="modal-content">
+        <h4>Переселение особи</h4>
+        <div class="form-group">
+            <label>Целевая комната</label>
+            <select id="transfer-loc" onchange="renderTransferBlocks()"></select>
+        </div>
+        <div class="form-group">
+            <label>Целевой стеллаж/ряд</label>
+            <select id="transfer-block" onchange="renderTransferCells()"></select>
+        </div>
+        <div class="form-group">
+            <label>Целевое место</label>
+            <select id="transfer-cell"></select>
+        </div>
+        <button class="btn-main" style="background:var(--purple);" onclick="executeTransfer()">Выполнить трансфер</button>
+        <button class="btn-sec" onclick="document.getElementById('modal-transfer').style.display='none'">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-stats" class="modal">
+    <div class="modal-content" style="max-width: 650px;">
+        <h4 id="stats-title">Учет кормов по локации</h4>
+        <div id="stats-data"></div>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
+    </div>
+</div>
+
+<div id="modal-report" class="modal">
+    <div class="modal-content" style="max-width: 750px;">
+        <h4 id="report-title-ui">Отчёт</h4>
+        <div id="report-preview" class="rep-preview"></div>
+        <button class="btn-main" style="background:var(--green);" onclick="downloadCurrentHtmlReport()">📥 Скачать HTML</button>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
+    </div>
+</div>
+
+<div id="modal-calendar" class="modal">
+    <div class="modal-content" style="max-width: 420px;">
+        <h4 id="calendar-title">Календарь</h4>
+        <div class="cal-month-nav">
+            <button class="btn-sec" style="margin:0; padding:8px 16px; font-weight:bold;" onclick="changeCalendarMonth(-1)">&lt;</button>
+            <span id="calendar-month-label" style="font-weight:bold;"></span>
+            <button class="btn-sec" style="margin:0; padding:8px 16px; font-weight:bold;" onclick="changeCalendarMonth(1)">&gt;</button>
+        </div>
+        <div class="cal-weekdays">
+            <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+        </div>
+        <div id="calendar-grid" class="cal-grid"></div>
+        <div id="calendar-legend" class="cal-legend"></div>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
+    </div>
+</div>
+
+<div id="modal-daysheet" class="modal sheet-modal">
+    <div class="modal-content sheet-content">
+        <div class="sheet-handle"></div>
+        <h4 id="daysheet-title">Детали</h4>
+        <div id="daysheet-body" class="sheet-body"></div>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
+    </div>
+</div>
+
+<input type="file" id="import-file" style="display:none;" onchange="handleImport(this)">
+
+<div class="bottom-nav">
+    <div onclick="showModalLocation(null)" class="nav-item edit-ui">+ Локация</div>
+    <div onclick="triggerImport()" class="nav-item">📂 Импорт</div>
+    <div onclick="exportData()" class="nav-item">💾 Бэкап</div>
+    <div onclick="wipeDatabase()" class="nav-item edit-ui" style="color:var(--red);">🗑️ Очистить БД</div>
+</div>
+
+<script>
+    const RATS = [
+        {n:1, t:"Голыш", w:5.5, l:"≈ 3"}, {n:2, t:"Опушенок", w:14.5, l:"4-5"}, {n:3, t:"Бегунок (мол.)", w:25.5, l:"6-8"},
+        {n:4, t:"Бегунок (подр.)", w:38, l:"9-11"}, {n:5, t:"Крупный бегунок", w:62.5, l:"12-14"}, {n:6, t:"Подросток (сред.)", w:114.5, l:"15-17"},
+        {n:7, t:"Молодая (бол.)", w:207.5, l:"18-20"}, {n:8, t:"Взрослая", w:250, l:"21-23"}, {n:9, t:"Взрослая крупная", w:361, l:"> 24"}
+    ];
+    const MICE = [
+        {n:1, t:"Голыш", w:1.75, l:"≈ 1.5-2"}, {n:2, t:"Опушенок", w:4.5, l:"2.5-3.5"}, {n:3, t:"Бегунок", w:9.5, l:"4-5"},
+        {n:4, t:"Подросток", w:15.5, l:"5.5-6.5"}, {n:5, t:"Молодая (бол.)", w:22, l:"7-8"}, {n:6, t:"Взрослая крупная", w:30, l:"> 8.5"}
+    ];
+    const RABBITS = [
+        {n:1, t:"Кролик мелкий (молодняк)", w:600, l:"≈ 20-25"},
+        {n:2, t:"Кролик средний (подросток)", w:1500, l:"≈ 30-35"},
+        {n:3, t:"Кролик крупный (взрослый)", w:3500, l:"> 40"}
+    ];
+    const FEED_TYPE_LABELS = { 'RATS': 'Крыса', 'MICE': 'Мышь', 'RABBITS': 'Кролик' };
+    const FED_INDICATOR_HOURS = 72; // сколько часов держится зелёная отметка "сыт" после кормления (v1.5.1: было 48)
+    const FED_INDICATOR_MS = FED_INDICATOR_HOURS * 60 * 60 * 1000;
+
+    // --- Палитра календаря кормлений/линек (v1.5.2) ---
+    // Ячейка стеллажа в режиме просмотра: 4 стороны рамки + пунктирный контур "оставлено на ночь".
+    // Дни в общей сетке календаря: один приоритетный цвет (список CAL_DAY_PRIORITY ниже).
+    const CAL_COLORS = {
+        fed: '#2e7d32',        // покормлено — зелёный (совпадает с --green)
+        refused: '#c62828',    // отказ — красный (совпадает с --red)
+        shedding: '#ff8f00',   // линька (помутнение) — янтарный (совпадает с --gold)
+        partial: '#283593',    // частично съедено — насыщенный тёмно-синий (индиго), отличается от рамки занятых ячеек
+        pending: '#6a1b9a'     // оставлено на ночь — фиолетовый пунктир (совпадает с --purple)
+    };
+    const CAL_LABELS = {
+        fed: 'Покормлено', refused: 'Отказ', shedding: 'Линька (помутнение)',
+        partial: 'Частично съедено', pending: 'Оставлено на ночь'
+    };
+    // Приоритет для календарной сетки (только 3 цвета: покормлено засчитывается и при "частично")
+    const CAL_DAY_PRIORITY = ['refused', 'shedding', 'fed'];
+
+    function toDateStr(d) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+
+    // Дата+время для отображения в отчётах/журналах (v1.5.4) — ${log.date} без времени раньше
+    // не различал несколько кормлений в один день. Если timestamp отсутствует/битый — fallback на log.date.
+    function formatLogDateTime(timestamp, fallbackDate) {
+        const ts = Number(timestamp);
+        if (!ts || isNaN(ts)) return fallbackDate || '—';
+        const d = new Date(ts);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // Категории событий одной ячейки на конкретную дату (для рамки в режиме просмотра и для сетки календаря)
+    function getDayCategoriesForCell(cell, dateStr) {
+        const cats = { fed: false, refused: false, shedding: false, partial: false, pending: false };
+        if (!cell || cell.isService) return cats;
+        const targetTime = new Date(dateStr).getTime();
+
+        (cell.animals || []).forEach(a => {
+            (a.feed_logs || []).forEach(log => {
+                if (log.date !== dateStr) return;
+                if (log.status === 'Съедено') cats.fed = true;
+                else if (log.status === 'Отказ') cats.refused = true;
+                else if (log.status === 'Частично') cats.partial = true;
+                else if (log.status === 'Оставлен на ночь') cats.pending = true;
+            });
+
+            // Линька: фаза "Помутнение" подсвечивается на всём промежутке от даты записи
+            // до следующей записи (или до сегодня, если линька ещё не завершена).
+            const logs = a.shed_logs || [];
+            for (let i = 0; i < logs.length; i++) {
+                if (logs[i].status !== 'Помутнение') continue;
+                const startTime = new Date(logs[i].date).getTime();
+                const next = logs[i + 1];
+                const endTime = next ? new Date(next.date).getTime() : Date.now();
+                if (targetTime >= startTime && targetTime <= endTime) { cats.shedding = true; break; }
+            }
+        });
+        return cats;
+    }
+
+    // Агрегированная активность за месяц (для рамок вокруг чисел в сетке календаря) — по одной локации
+    function getMonthActivity(locId, year, month) {
+        const loc = db.find(l => l.id === locId);
+        const activity = {};
+        if (!loc) return activity;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = toDateStr(new Date(year, month, d));
+            let cats = { fed: false, refused: false, shedding: false };
+            loc.blocks.forEach(block => {
+                getBlockCells(block).forEach(cell => {
+                    const c = getDayCategoriesForCell(cell, dateStr);
+                    if (c.refused) cats.refused = true;
+                    if (c.shedding) cats.shedding = true;
+                    if (c.fed || c.partial) cats.fed = true;
+                });
+            });
+            activity[dateStr] = CAL_DAY_PRIORITY.find(k => cats[k]) || null;
+        }
+        return activity;
+    }
+
+    // То же самое, но по всей базе сразу (для общего календаря)
+    function getGeneralMonthActivity(year, month) {
+        const activity = {};
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = toDateStr(new Date(year, month, d));
+            let cats = { fed: false, refused: false, shedding: false };
+            db.forEach(loc => {
+                loc.blocks.forEach(block => {
+                    getBlockCells(block).forEach(cell => {
+                        const c = getDayCategoriesForCell(cell, dateStr);
+                        if (c.refused) cats.refused = true;
+                        if (c.shedding) cats.shedding = true;
+                        if (c.fed || c.partial) cats.fed = true;
+                    });
+                });
+            });
+            activity[dateStr] = CAL_DAY_PRIORITY.find(k => cats[k]) || null;
+        }
+        return activity;
+    }
+
+    // Краткая сводка по локации за конкретную дату (для списка локаций в общем календаре)
+    function getLocationDaySummary(locId, dateStr) {
+        const loc = db.find(l => l.id === locId);
+        let counts = { fed: 0, refused: 0, shedding: 0, partial: 0, pending: 0 };
+        if (!loc) return counts;
+        loc.blocks.forEach(block => {
+            getBlockCells(block).forEach(cell => {
+                const c = getDayCategoriesForCell(cell, dateStr);
+                Object.keys(counts).forEach(k => { if (c[k]) counts[k]++; });
+            });
+        });
+        return counts;
+    }
+
+    let calendarState = { mode: null, locId: null, year: 0, month: 0 }; // mode: 'location' | 'general'
+
+    // --- Сворачивание локаций (v1.5.5) ---
+    // Состояние (какие локации свёрнуты) хранится отдельным ключом, НЕ в базе животных —
+    // это чисто UI-предпочтение конкретного устройства/браузера, а не данные о животных.
+    const UI_COLLAPSE_KEY = 'exofeed_ui_collapsed_locs';
+    let collapsedLocs = new Set();
+    try {
+        const storedCollapsed = JSON.parse(localStorage.getItem(UI_COLLAPSE_KEY) || '[]');
+        if (Array.isArray(storedCollapsed)) collapsedLocs = new Set(storedCollapsed);
+    } catch (e) { collapsedLocs = new Set(); }
+
+    function saveCollapsedState() {
+        try { localStorage.setItem(UI_COLLAPSE_KEY, JSON.stringify([...collapsedLocs])); } catch (e) {}
+    }
+    function toggleLocationCollapse(locId) {
+        if (collapsedLocs.has(locId)) collapsedLocs.delete(locId);
+        else collapsedLocs.add(locId);
+        saveCollapsedState();
+        render();
+    }
+
+    // Русское склонение по числу (1 стеллаж / 2 стеллажа / 5 стеллажей)
+    function pluralizeRu(n, one, few, many) {
+        const mod10 = Math.abs(n) % 10, mod100 = Math.abs(n) % 100;
+        if (mod100 >= 11 && mod100 <= 14) return many;
+        if (mod10 === 1) return one;
+        if (mod10 >= 2 && mod10 <= 4) return few;
+        return many;
+    }
+
+    // Краткая сводка для свёрнутой локации: "3 стеллажа · 12 занято из 20"
+    function getLocationSummary(loc) {
+        const blockCount = loc.blocks.length;
+        let occupied = 0, total = 0;
+        loc.blocks.forEach(block => {
+            getBlockCells(block).forEach(cell => {
+                if (cell.isService) return;
+                total++;
+                if (cell.animals && cell.animals.length > 0) occupied++;
+            });
+        });
+        const blockWord = pluralizeRu(blockCount, 'стеллаж', 'стеллажа', 'стеллажей');
+        return `${blockCount} ${blockWord} &middot; ${occupied} занято из ${total}`;
+    }
+    let calendarPreview = null; // { locId, date } — активный режим просмотра стеллажа по дате
+
+    function openLocationCalendar(locId) {
+        const now = new Date();
+        calendarState = { mode: 'location', locId, year: now.getFullYear(), month: now.getMonth() };
+        renderCalendarGrid();
+        showModal('modal-calendar');
+    }
+    function openGeneralCalendar() {
+        const now = new Date();
+        calendarState = { mode: 'general', locId: null, year: now.getFullYear(), month: now.getMonth() };
+        renderCalendarGrid();
+        showModal('modal-calendar');
+    }
+    function changeCalendarMonth(delta) {
+        calendarState.month += delta;
+        if (calendarState.month < 0) { calendarState.month = 11; calendarState.year--; }
+        if (calendarState.month > 11) { calendarState.month = 0; calendarState.year++; }
+        renderCalendarGrid();
+    }
+
+    function renderCalendarGrid() {
+        const { mode, locId, year, month } = calendarState;
+        const activity = mode === 'location' ? getMonthActivity(locId, year, month) : getGeneralMonthActivity(year, month);
+        const loc = mode === 'location' ? db.find(l => l.id === locId) : null;
+
+        document.getElementById('calendar-title').textContent = mode === 'location' ? `Календарь — ${loc ? loc.name : ''}` : 'Общий календарь (вся база)';
+        document.getElementById('calendar-month-label').textContent = `${CAL_MONTHS_NOM[month]} ${year}`;
+
+        const firstDay = new Date(year, month, 1);
+        const startWeekday = (firstDay.getDay() + 6) % 7; // 0 = Пн ... 6 = Вс
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const todayStr = toDateStr(new Date());
+
+        let gridHtml = '';
+        for (let i = 0; i < startWeekday; i++) gridHtml += `<div class="cal-day cal-empty"></div>`;
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = toDateStr(new Date(year, month, d));
+            const cat = activity[dateStr];
+            const isFuture = dateStr > todayStr;
+            const isToday = dateStr === todayStr;
+            let style = (cat && !isFuture) ? `border-color:${CAL_COLORS[cat]};` : '';
+            gridHtml += `<div class="cal-day ${isToday ? 'cal-today' : ''} ${isFuture ? 'cal-future' : ''}" style="${style}" ${isFuture ? '' : `onclick="selectCalendarDate('${dateStr}')"`}>${d}</div>`;
+        }
+        document.getElementById('calendar-grid').innerHTML = gridHtml;
+
+        document.getElementById('calendar-legend').innerHTML = CAL_DAY_PRIORITY.map(k =>
+            `<span class="cal-legend-item"><span class="cal-legend-swatch" style="border-color:${CAL_COLORS[k]}"></span>${CAL_LABELS[k]}</span>`
+        ).join('');
+    }
+
+    function selectCalendarDate(dateStr) {
+        if (calendarState.mode === 'location') {
+            closeModals();
+            calendarPreview = { locId: calendarState.locId, date: dateStr };
+            render();
+        } else {
+            openGeneralDaySummary(dateStr);
+        }
+    }
+
+    // Общий календарь: клик по дате -> список локаций с краткой сводкой, клик по локации -> её персональный просмотр этой же даты
+    function openGeneralDaySummary(dateStr) {
+        let rowsHtml = '';
+        db.forEach(loc => {
+            const s = getLocationDaySummary(loc.id, dateStr);
+            const total = s.fed + s.refused + s.shedding + s.partial + s.pending;
+            if (total === 0) return;
+            let parts = [];
+            if (s.fed) parts.push(`покормлено: ${s.fed}`);
+            if (s.refused) parts.push(`<span style="color:${CAL_COLORS.refused}">отказы: ${s.refused}</span>`);
+            if (s.shedding) parts.push(`<span style="color:${CAL_COLORS.shedding}">линька: ${s.shedding}</span>`);
+            if (s.partial) parts.push(`частично: ${s.partial}`);
+            if (s.pending) parts.push(`на ночь: ${s.pending}`);
+            rowsHtml += `
+                <div class="sheet-row" onclick="closeModals(); openLocationCalendarAtDate(${loc.id}, '${dateStr}')">
+                    <b>${loc.name}</b>
+                    <div style="font-size:0.78rem; color:#aaa;">${parts.join(' &nbsp;|&nbsp; ')}</div>
+                </div>`;
+        });
+        if (!rowsHtml) rowsHtml = `<p style="color:#888;">За эту дату нет ни одной отметки ни в одной локации.</p>`;
+        document.getElementById('daysheet-title').textContent = `${dateStr} — по локациям`;
+        document.getElementById('daysheet-body').innerHTML = rowsHtml;
+        showModal('modal-daysheet');
+    }
+
+    // Открыть режим просмотра конкретной локации сразу на нужной дате (используется из общего календаря)
+    function openLocationCalendarAtDate(locId, dateStr) {
+        calendarPreview = { locId, date: dateStr };
+        render();
+    }
+
+    function exitCalendarPreview() {
+        calendarPreview = null;
+        render();
+    }
+    function changePreviewDate() {
+        if (calendarPreview) openLocationCalendar(calendarPreview.locId);
+    }
+
+    // Клик по подсвеченной ячейке в режиме просмотра — bottom sheet с тем, что произошло в эту дату
+    function openCellDaySummary(locId, blockId, cellIdx) {
+        const cell = getCell(locId, blockId, cellIdx);
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        const pos = locateCellPosition(block, cellIdx);
+        const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+        const dateStr = calendarPreview.date;
+
+        let rowsHtml = '';
+        (cell.animals || []).forEach(a => {
+            let events = '';
+            (a.feed_logs || []).forEach(log => {
+                if (log.date !== dateStr) return;
+                const eatenText = (log.eatenCount === null || log.eatenCount === undefined) ? '' : ` (съедено ${log.eatenCount} из ${log.count})`;
+                const reasonText = log.refusalReason ? ` — ${log.refusalReason}` : '';
+                const timeText = log.timestamp ? ` <span style="color:#888; font-size:0.7rem;">[${formatLogDateTime(log.timestamp, log.date).split(' ')[1] || ''}]</span>` : '';
+                events += `<div>🍖 ${FEED_TYPE_LABELS[log.type] || log.type} [№${log.sizeNum}] ${log.sizeTitle}${eatenText} — <b>${log.status}</b>${reasonText}${timeText}</div>`;
+            });
+            const cats = getDayCategoriesForCell({ animals: [a] }, dateStr);
+            if (cats.shedding) events += `<div>🦎 Фаза линьки (помутнение глаз)</div>`;
+            (a.shed_logs || []).forEach(log => {
+                if (log.date !== dateStr) return;
+                if (log.status !== 'Помутнение') events += `<div>🦎 Линька зафиксирована: <b>${log.status}</b></div>`;
+            });
+            if (events) rowsHtml += `<div class="sheet-row"><b>${a.species} ${a.gender}</b>${events}</div>`;
+        });
+        if (!rowsHtml) rowsHtml = `<p style="color:#888;">В этой ячейке нет отметок за выбранную дату.</p>`;
+
+        document.getElementById('daysheet-title').textContent = `${address} — ${dateStr}`;
+        document.getElementById('daysheet-body').innerHTML = rowsHtml;
+        showModal('modal-daysheet');
+    }
+
+
+    const SPECIES_BANK = [
+        {g:"Беспозвоночные", r:"Ахатина гигантская", l:"Achatina fulica"},
+        {g:"Беспозвоночные", r:"Красноногий паук птицеед", l:"Brachypelma smithii"},
+        {g:"Беспозвоночные", r:"Белоколенный паук-птицеед", l:"Acanthoscurria geniculata"},
+        {g:"Беспозвоночные", r:"Палочник", l:"Phasmida"},
+        {g:"Амфибии", r:"Австралийская голубая квакша", l:"Ranoidea caerulea"},
+        {g:"Амфибии", r:"Жаба ага", l:"Rhinella marina"},
+        {g:"Амфибии", r:"Жаба зеленая", l:"Bufotes viridis"},
+        {g:"Черепахи", r:"Амбоинская шарнирная черепаха", l:"Cuora amboinensis"},
+        {g:"Черепахи", r:"Малайская черепаха", l:"Malayemys macrocephala"},
+        {g:"Черепахи", r:"Красноухая черепаха", l:"Trachemys scripta"},
+        {g:"Черепахи", r:"Австралийская большеголовая черепаха", l:"Emydura australis"},
+        {g:"Черепахи", r:"Среднеазиатская черепаха", l:"Testudo horsfieldii"},
+        {g:"Черепахи", r:"Пантеровая черепаха", l:"Stigmochelys pardalis"},
+        {g:"Черепахи", r:"Эластичная черепаха", l:"Malacochersus tornieri"},
+        {g:"Черепахи", r:"Китайский трионикс", l:"Pelodiscus sinensis"},
+        {g:"Черепахи", r:"Двухкоготная черепаха", l:"Carettochelys insculpta"},
+        {g:"Черепахи", r:"Желтопятнистая речная черепаха", l:"Podocnemis unifilis"},
+        {g:"Черепахи", r:"Бахромчатая черепаха Мата-мата", l:"Chelus fimbriata"},
+        {g:"Черепахи", r:"Змеиношейная черепаха", l:"Chelodina longicollis"},
+        {g:"Черепахи", r:"Каймановая черепаха", l:"Chelydra serpentina"},
+        {g:"Черепахи", r:"Китайская полосатошеяя черепаха", l:"Mauremys sinensis"},
+        {g:"Крокодилы", r:"Крокодиловый кайман", l:"Caiman crocodilus"},
+        {g:"Крокодилы", r:"Кубинский крокодил", l:"Crocodylus rhombifer"},
+        {g:"Крокодилы", r:"Сиамский крокодил", l:"Crocodylus siamensis"},
+        {g:"Ящерицы", r:"Пятнистый эублефар", l:"Eublepharis macularius"},
+        {g:"Ящерицы", r:"Сцинковый геккон", l:"Teratoscincus scincus"},
+        {g:"Ящерицы", r:"Геккон токи", l:"Gekko gecko"},
+        {g:"Ящерицы", r:"Дневной мадагаскарский геккон", l:"Phelsuma madagascariensis"},
+        {g:"Ящерицы", r:"Йеменский хамелеон", l:"Chamaeleo calyptratus"},
+        {g:"Ящерицы", r:"Бородатая агама", l:"Pogona vitticeps"},
+        {g:"Ящерицы", r:"Синеязыкий сцинк", l:"Tiliqua scincoides"},
+        {g:"Ящерицы", r:"Полосатый водяной варан", l:"Varanus salvator"},
+        {g:"Ящерицы", r:"Прыткая ящерица", l:"Lacerta agilis"},
+        {g:"Ящерицы", r:"Геккон бананоед реснитчатый", l:"Correlophus ciliatus"},
+        {g:"Ящерицы", r:"Кубинская земляная игуана", l:"Cyclura nubila"},
+        {g:"Ящерицы", r:"Молуккская парусная агама", l:"Hydrosaurus amboinensis"},
+        {g:"Ящерицы", r:"Крокодиловый варан", l:"Varanus salvadorii"},
+        {g:"Ящерицы", r:"Полосатый варан", l:"Varanus salvator"},
+        {g:"Ящерицы", r:"Парусная ящерица Вебера", l:"Hydrosaurus weberi"},
+        {g:"Змеи неядовитые", r:"Радужный удав", l:"Epicrates cenchria"},
+        {g:"Змеи неядовитые", r:"Обыкновенный удав", l:"Boa constrictor"},
+        {g:"Змеи неядовитые", r:"Кубинский удав", l:"Chilabothrus angulifer"},
+        {g:"Змеи неядовитые", r:"Восточный удавчик", l:"Eryx tataricus"},
+        {g:"Змеи неядовитые", r:"Песчаный удавчик", l:"Eryx jaculus"},
+        {g:"Змеи неядовитые", r:"Парагвайская анаконда", l:"Eunectes notaeus"},
+        {g:"Змеи неядовитые", r:"Мадагаскарский древесный удав", l:"Sanzinia madagascariensis"},
+        {g:"Змеи неядовитые", r:"Индонезийский водяной питон", l:"Pythonodymus mackloti"},
+        {g:"Змеи неядовитые", r:"Темный тигровый питон", l:"Python bivittatus"},
+        {g:"Змеи неядовитые", r:"Королевский питон", l:"Python regius"},
+        {g:"Змеи неядовитые", r:"Сетчатый питон", l:"Malayopython reticulatus"},
+        {g:"Змеи неядовитые", r:"Ковровый питон", l:"Morelia spilota"},
+        {g:"Змеи неядовитые", r:"Узорчатый полоз", l:"Elaphe dione"},
+        {g:"Змеи неядовитые", r:"Маисовый полоз", l:"Pantherophis guttatus"},
+        {g:"Змеи неядовитые", r:"Оранжевый американский полоз", l:"Pantherophis guttatus var."},
+        {g:"Змеи неядовитые", r:"Четырехполосый Палласов полоз", l:"Elaphe quatuorlineata"},
+        {g:"Змеи неядовитые", r:"Калифорн. королевская змея", l:"Lampropeltis californiae"},
+        {g:"Змеи неядовитые", r:"Королевская змея сплендида", l:"Lampropeltis splendida"},
+        {g:"Змеи неядовитые", r:"Шри-Ланкийский питон", l:"Python molurus pimbura"},
+        {g:"Змеи неядовитые", r:"Полоз разноцветный", l:"Hemorrhois ravergieri"},
+        {g:"Змеи неядовитые", r:"Краснополосый полоз", l:"Elaphe rufodorsata"},
+        {g:"Змеи ядовитые", r:"Египетская кобра", l:"Naja haje"},
+        {g:"Змеи ядовитые", r:"Индийская кобра", l:"Naja naja"},
+        {g:"Змеи ядовитые", r:"Кольчатая водяная кобра", l:"Naja annulata"},
+        {g:"Змеи ядовитые", r:"Яванская плюющая кобра", l:"Naja sputatrix"},
+        {g:"Змеи ядовитые", r:"Среднеазиатская кобра", l:"Naja oxiana"},
+        {g:"Змеи ядовитые", r:"Чёрная мамба", l:"Dendroaspis polylepis"},
+        {g:"Змеи ядовитые", r:"Степная гадюка", l:"Vipera renardi"},
+        {g:"Змеи ядовитые", r:"Среднеазиатская гюрза", l:"Macrovipera lebetina turanica"},
+        {g:"Змеи ядовитые", r:"Африканская шумящая гадюка", l:"Bitis arietans"},
+        {g:"Змеи ядовитые", r:"Обыкновенный щитомордник", l:"Gloydius halys"},
+        {g:"Змеи ядовитые", r:"Красный гремучник", l:"Crotalus ruber"},
+        {g:"Змеи ядовитые", r:"Гремучник Митчела", l:"Crotalus mitchellii"},
+        {g:"Змеи ядовитые", r:"Гюрза закавказская", l:"Macrovipera lebetina obtusa"},
+        {g:"Змеи ядовитые", r:"Палестинская гадюка", l:"Daboia palaestinae"},
+        {g:"Змеи ядовитые", r:"Гадюка армянская", l:"Montivipera raddei"},
+        {g:"Змеи ядовитые", r:"Уссурийский щитомордник", l:"Gloydius ussuriensis"},
+        {g:"Змеи ядовитые", r:"Песчаная эфа", l:"Echis carinatus"},
+        {g:"Змеи ядовитые", r:"Моноклевая кобра", l:"Naja kaouthia"},
+        {g:"Змеи ядовитые", r:"Щитковая кобра", l:"Aspidelaps scutatus"},
+        {g:"Змеи ядовитые", r:"Гадюка обыкновенная", l:"Vipera berus"},
+        {g:"Млекопитающие", r:"Нильский крылан", l:"Rousettus aegyptianus"},
+        {g:"Млекопитающие", r:"Джунгарский хомячок", l:"Phodopus sungorus"},
+        {g:"Млекопитающие", r:"Дегу", l:"Octodon degus"},
+        {g:"Млекопитающие", r:"Суриката", l:"Suricata suricatta"},
+        {g:"Млекопитающие", r:"Тайра", l:"Eira barbara"},
+        {g:"Млекопитающие", r:"Харза", l:"Martes flavigula"},
+        {g:"Млекопитающие", r:"Ушастый ёж", l:"Hemiechinus auritus"},
+        {g:"Млекопитающие", r:"Трёхпоясный броненосец", l:"Tolypeutes matacus"},
+        {g:"Млекопитающие", r:"Монгольская песчанка", l:"Meriones unguiculatus"},
+        {g:"Млекопитающие", r:"Шестипоясный броненосец", l:"Euphractus sexcinctus"}
+    ];
+
+    let db = [];
+    const CURRENT_DB_KEY = 'exofeed_db_v1.5.5';
+    // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
+    // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
+    // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
+    // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    for (let key of legacyKeys) {
+        let oldData = localStorage.getItem(key);
+        if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
+    }
+    if (!db || db.length === 0) { db = []; }
+
+    // --- МИГРАЦИЯ СТАРОЙ СТРУКТУРЫ (block.cells + block.rows(число)) В НОВУЮ (block.rows[i].cells[j]) ---
+    // Также нормализует каждую ячейку до актуального набора полей: label, animals, isService, width.
+    // И нормализует данные каждого животного (feed_logs/shed_logs) до актуального формата v1.5.1.
+    function normalizeAnimal(animal) {
+        if (!animal.feed_logs) animal.feed_logs = [];
+        animal.feed_logs.forEach(log => {
+            // eatenCount появился в v1.5.1: сколько реально съедено (может быть меньше count).
+            if (log.eatenCount === undefined) {
+                if (log.status === 'Съедено') log.eatenCount = log.count;
+                else if (log.status === 'Отказ') log.eatenCount = 0;
+                else log.eatenCount = null; // 'Оставлен на ночь' — ещё не разрешено
+            }
+            if (log.refusalReason === undefined) log.refusalReason = '';
+            if (log.timestamp === undefined) log.timestamp = Date.now();
+        });
+        if (!animal.shed_logs) animal.shed_logs = [];
+        animal.shed_logs.forEach(log => {
+            if (log.timestamp === undefined) {
+                // старые записи содержали только date (строка) — восстанавливаем метку времени из неё
+                const parsed = Date.parse(log.date);
+                log.timestamp = isNaN(parsed) ? Date.now() : parsed;
+            }
+        });
+        // Текущий статус линьки всегда должен соответствовать последней записи истории (после миграции/правок)
+        if (animal.shed_logs.length > 0) {
+            animal.shed_status = animal.shed_logs[animal.shed_logs.length - 1].status;
+        } else if (!animal.shed_status) {
+            animal.shed_status = 'Норма';
+        }
+        return animal;
+    }
+    function normalizeCell(cell) {
+        if (cell.label === undefined) {
+            cell.label = (cell.name !== undefined && cell.name !== null) ? String(cell.name) : '';
+        }
+        delete cell.name;
+        if (cell.isService === undefined) cell.isService = false;
+        if (cell.width === undefined || !cell.width) cell.width = 1;
+        if (!cell.animals) cell.animals = [];
+        cell.animals.forEach(normalizeAnimal);
+        return cell;
+    }
+    function migrateBlock(block) {
+        if (Array.isArray(block.rows)) {
+            // уже новая иерархия rows[i].cells[j] — просто донормализуем поля ячеек (на случай данных из промежуточной версии)
+            block.rows.forEach(row => { (row.cells || []).forEach(normalizeCell); });
+            return;
+        }
+        const cols = block.cols || (block.cells ? block.cells.length : 1) || 1;
+        const cellsArr = (block.cells || []).map(normalizeCell);
+        const newRows = [];
+        for (let i = 0; i < cellsArr.length; i += cols) {
+            newRows.push({ cells: cellsArr.slice(i, i + cols) });
+        }
+        if (newRows.length === 0) newRows.push({ cells: [] });
+        block.rows = newRows;
+        delete block.cells;
+        delete block.cols;
+    }
+    db.forEach(loc => { (loc.blocks || []).forEach(migrateBlock); });
+
+    // --- ХЕЛПЕРЫ ДЛЯ ИЕРАРХИИ Block -> Rows -> Cells ---
+    function getBlockCells(block) {
+        let flat = [];
+        (block.rows || []).forEach(row => (row.cells || []).forEach(c => flat.push(c)));
+        return flat;
+    }
+    function getCell(locId, blockId, cellIdx) {
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        return getBlockCells(block)[cellIdx];
+    }
+    // Буквенно-числовой адрес "как в шахматах": буква — по индексу ряда, число — по индексу места в ряду.
+    // Вычисляется на лету от текущей позиции, нигде не хранится — всегда физически актуален.
+    function rowLetter(rowIdx) {
+        let letter = '';
+        let n = rowIdx;
+        do {
+            letter = String.fromCharCode(65 + (n % 26)) + letter;
+            n = Math.floor(n / 26) - 1;
+        } while (n >= 0);
+        return letter;
+    }
+    function getCellAddress(rowIdx, cellIdxInRow) {
+        return `${rowLetter(rowIdx)}${cellIdxInRow + 1}`;
+    }
+    // Находит {rowIdx, cellIdxInRow} ячейки по её плоскому индексу (порядок обхода совпадает с getBlockCells)
+    function locateCellPosition(block, flatIdx) {
+        let count = 0;
+        for (let r = 0; r < block.rows.length; r++) {
+            const rowLen = block.rows[r].cells.length;
+            if (flatIdx < count + rowLen) return { rowIdx: r, cellIdxInRow: flatIdx - count };
+            count += rowLen;
+        }
+        return null;
+    }
+
+    let isLocked = true;
+    let state = { locId: null, blockId: null, cellIdx: null, animalIdx: null, selectedBulkIdxs: [] };
+
+
+    function save() { localStorage.setItem(CURRENT_DB_KEY, JSON.stringify(db)); render(); }
+
+    // --- PIN на инженерный режим (v1.5.3) ---
+    // ВАЖНО: это статичный HTML-файл без сервера, поэтому PIN — защита только от случайного нажатия
+    // (ребёнок, посетитель ткнул кнопку), а не от целенаправленного взлома: код полностью виден через
+    // "просмотр исходного кода" браузера. Хранится отдельным ключом localStorage, не в базе животных.
+    const ENGINEER_PIN_KEY = 'exofeed_engineer_pin';
+    function getStoredPin() { return localStorage.getItem(ENGINEER_PIN_KEY); }
+
+    function toggleLock() {
+        if (isLocked) {
+            requestEngineerAccess(); // РАБОТА -> ИНЖЕНЕР: требует PIN
+        } else {
+            isLocked = true; // ИНЖЕНЕР -> РАБОТА: мгновенно, без вопросов
+            applyLockUI();
+            render();
+        }
+    }
+
+    function requestEngineerAccess() {
+        const storedPin = getStoredPin();
+        if (!storedPin) {
+            const pin1 = prompt('PIN для инженерного режима ещё не задан.\nПридумайте 4-значный PIN:');
+            if (pin1 === null) return;
+            if (!/^\d{4}$/.test(pin1)) { alert('PIN должен состоять ровно из 4 цифр.'); return; }
+            const pin2 = prompt('Повторите PIN для подтверждения:');
+            if (pin1 !== pin2) { alert('PIN не совпадает. Попробуйте ещё раз.'); return; }
+            localStorage.setItem(ENGINEER_PIN_KEY, pin1);
+            isLocked = false; applyLockUI(); render();
+        } else {
+            const entered = prompt('Введите PIN для входа в инженерный режим:');
+            if (entered === null) return;
+            if (entered === storedPin) { isLocked = false; applyLockUI(); render(); }
+            else alert('Неверный PIN.');
+        }
+    }
+
+    function resetEngineerPin() {
+        if (!getStoredPin()) { alert('PIN ещё не задан — задать можно при следующем входе в инженерный режим.'); return; }
+        if (!confirm('Сбросить PIN инженерного режима? Текущий PIN перестанет действовать, при следующем входе можно будет задать новый.\nДанные животных при этом не затрагиваются.')) return;
+        localStorage.removeItem(ENGINEER_PIN_KEY);
+        alert('PIN сброшен.');
+    }
+
+    function applyLockUI() {
+        document.getElementById('lock-status').innerHTML = isLocked ? '🔒 РАБОТА' : '🔓 ИНЖЕНЕР';
+        document.getElementById('lock-status').className = `lock-btn ${isLocked ? 'locked' : 'unlocked'}`;
+        document.body.classList.toggle('engineer-mode', !isLocked);
+    }
+
+    function closeModals() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); }
+    function insertNumSign() { const input = document.getElementById('block-name'); input.value += '№'; input.focus(); }
+
+    function showModalLocation(id) {
+        state.locId = id;
+        const loc = db.find(l => l.id === id);
+        document.getElementById('loc-name').value = loc ? loc.name : '';
+        document.getElementById('loc-modal-title').innerText = loc ? 'Правка локации' : 'Новая локация';
+        document.getElementById('modal-location').style.display = 'block';
+    }
+
+    function saveLocation() {
+        const name = document.getElementById('loc-name').value;
+        if(!name) return;
+        if(state.locId) { db.find(l => l.id === state.locId).name = name; } 
+        else { db.push({id: Date.now(), name, blocks: []}); }
+        save(); closeModals();
+    }
+
+    function openBlockModal(locId, blockId) {
+        state.locId = locId; state.blockId = blockId;
+        const block = blockId ? db.find(l => l.id === locId).blocks.find(b => b.id === blockId) : null;
+        document.getElementById('block-name').value = block ? block.name : '';
+        document.getElementById('block-type').value = block ? block.type : 'Террариум';
+        document.getElementById('block-geo-inputs').style.display = block ? 'none' : 'block';
+        document.getElementById('modal-block').style.display = 'block';
+    }
+
+    function saveBlock() {
+        const loc = db.find(l => l.id === state.locId);
+        if(state.blockId) {
+            const block = loc.blocks.find(b => b.id === state.blockId);
+            block.name = document.getElementById('block-name').value || "Без названия";
+            block.type = document.getElementById('block-type').value;
+        } else {
+            const rowsCount = parseInt(document.getElementById('block-rows').value) || 1;
+            const cols = parseInt(document.getElementById('block-cols').value) || 1;
+            // Адрес (буква ряда + номер места) больше не хранится — вычисляется на лету при отрисовке.
+            const rowsArr = [];
+            for (let r = 0; r < rowsCount; r++) {
+                let rowCells = [];
+                for (let c = 0; c < cols; c++) {
+                    rowCells.push({ label: '', animals: [], isService: false, width: 1 });
+                }
+                rowsArr.push({ cells: rowCells });
+            }
+            loc.blocks.push({
+                id: Date.now(), name: document.getElementById('block-name').value || "Без названия",
+                type: document.getElementById('block-type').value,
+                rows: rowsArr
+            });
+        }
+        save(); closeModals();
+    }
+
+    // --- УПРАВЛЕНИЕ РЯДАМИ (ПОЛКАМИ) И ЯЧЕЙКАМИ В ИНЖЕНЕРНОМ РЕЖИМЕ ---
+    function addRow(locId, blockId) {
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        block.rows.push({ cells: [] });
+        save();
+    }
+    function deleteRow(locId, blockId, rowIdx) {
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        const row = block.rows[rowIdx];
+        const hasAnimals = row.cells.some(c => c.animals && c.animals.length > 0);
+        const msg = hasAnimals ? "В этом ряду есть заселённые животные! Удалить ряд вместе с ними?" : "Удалить этот ряд (полку)?";
+        if (!confirm(msg)) return;
+        block.rows.splice(rowIdx, 1);
+        save();
+    }
+    function addCellToRow(locId, blockId, rowIdx) {
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        block.rows[rowIdx].cells.push({ label: '', animals: [], isService: false, width: 1 });
+        save();
+    }
+    function deleteCurrentCell() {
+        const block = db.find(l => l.id === state.locId).blocks.find(b => b.id === state.blockId);
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        if (!cell) return;
+        const hasAnimals = cell.animals && cell.animals.length > 0;
+        const msg = hasAnimals ? "В ячейке есть заселённые животные! Удалить ячейку вместе с ними?" : "Удалить эту ячейку?";
+        if (!confirm(msg)) return;
+        for (const row of block.rows) {
+            const idx = row.cells.indexOf(cell);
+            if (idx !== -1) { row.cells.splice(idx, 1); break; }
+        }
+        save(); closeModals();
+    }
+
+    // --- DRAG & DROP (ИНЖЕНЕРНЫЙ РЕЖИМ): перемещение ячейки в rows[i].cells[j] ---
+    function swapCells(locId, blockId, rowA, idxA, rowB, idxB) {
+        if (rowA === rowB && idxA === idxB) return;
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        const cellA = block.rows[rowA].cells[idxA];
+        const cellB = block.rows[rowB].cells[idxB];
+        block.rows[rowA].cells[idxA] = cellB;
+        block.rows[rowB].cells[idxB] = cellA;
+        save();
+    }
+
+    function attachCellDragHandlers() {
+        document.querySelectorAll('.cell[data-flat]').forEach(cellEl => {
+            let startX = 0, startY = 0, moved = false, dragging = false;
+            const locId = parseInt(cellEl.dataset.loc);
+            const blockId = parseInt(cellEl.dataset.block);
+            const rowIdx = parseInt(cellEl.dataset.row);
+            const cellIdxInRow = parseInt(cellEl.dataset.cellidx);
+            const flatIdx = parseInt(cellEl.dataset.flat);
+
+            cellEl.addEventListener('pointerdown', (e) => {
+                startX = e.clientX; startY = e.clientY; moved = false; dragging = false;
+                try { cellEl.setPointerCapture(e.pointerId); } catch (err) {}
+            });
+            cellEl.addEventListener('pointermove', (e) => {
+                const dx = e.clientX - startX, dy = e.clientY - startY;
+                if (Math.hypot(dx, dy) > 8) {
+                    moved = true;
+                    // Перетаскивание отключается во время просмотра стеллажа по дате (не имеет смысла на историческом срезе)
+                    const dragAllowed = !isLocked && !(calendarPreview && calendarPreview.locId === locId);
+                    if (dragAllowed) {
+                        if (!dragging) { dragging = true; cellEl.classList.add('dragging'); }
+                        document.querySelectorAll('.cell.drag-over').forEach(el => el.classList.remove('drag-over'));
+                        const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cell');
+                        if (target && target !== cellEl) target.classList.add('drag-over');
+                    }
+                }
+            });
+            cellEl.addEventListener('pointerup', (e) => {
+                cellEl.classList.remove('dragging');
+                document.querySelectorAll('.cell.drag-over').forEach(el => el.classList.remove('drag-over'));
+                if (dragging) {
+                    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cell');
+                    if (target && target !== cellEl && target.dataset.row !== undefined) {
+                        const tRow = parseInt(target.dataset.row);
+                        const tCellIdx = parseInt(target.dataset.cellidx);
+                        swapCells(locId, blockId, rowIdx, cellIdxInRow, tRow, tCellIdx);
+                    }
+                } else if (!moved) {
+                    if (calendarPreview && calendarPreview.locId === locId) {
+                        openCellDaySummary(locId, blockId, flatIdx);
+                    } else {
+                        openCell(locId, blockId, flatIdx);
+                    }
+                }
+                dragging = false; moved = false;
+            });
+            cellEl.addEventListener('pointercancel', () => {
+                cellEl.classList.remove('dragging');
+                document.querySelectorAll('.cell.drag-over').forEach(el => el.classList.remove('drag-over'));
+                dragging = false; moved = false;
+            });
+        });
+    }
+
+    function openCell(locId, blockId, cellIdx) {
+        state.locId = locId; state.blockId = blockId; state.cellIdx = cellIdx;
+        const cell = getCell(locId, blockId, cellIdx);
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        const pos = locateCellPosition(block, cellIdx);
+        const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+
+        document.getElementById('cell-title-ui').innerText = cell.isService ? `⚙ ${address} (сервисное место)` : address;
+        document.getElementById('cell-label-edit').value = cell.label || '';
+        document.getElementById('cell-width-edit').value = String(cell.width || 1);
+        document.getElementById('cell-service-edit').checked = !!cell.isService;
+
+        // Сервисное место не может принимать животных — скрываем кнопки заселения/кормления
+        document.getElementById('cell-animal-actions').style.display = cell.isService ? 'none' : 'flex';
+
+        renderInhabitants(cell);
+        document.getElementById('modal-cell').style.display = 'block';
+        updateUIElements();
+    }
+
+    function formatAge(a) {
+        if(a.birthYear && a.birthMonth !== undefined && a.birthMonth !== "") {
+            const now = new Date();
+            let yearDiff = now.getFullYear() - parseInt(a.birthYear);
+            let monthDiff = now.getMonth() - parseInt(a.birthMonth);
+            if(monthDiff < 0) { yearDiff--; monthDiff += 12; }
+            let str = '';
+            if(yearDiff > 0) str += `${yearDiff} г. `;
+            str += `${monthDiff} мес.`;
+            return `${str} [${a.age}]`;
+        }
+        return a.age || 'Ad.';
+    }
+
+    function renderInhabitants(cell) {
+        const list = document.getElementById('animals-list');
+        list.innerHTML = '';
+        const nowMs = Date.now();
+        const limitMs = FED_INDICATOR_MS;
+
+        cell.animals.forEach((a, idx) => {
+            const shedDays = getShedWarningDays(a);
+            let shedBadge = a.shed_status === 'Помутнение'
+                ? `<span class="animal-badge" style="background:#29b6f6; color:#000;">МУТНЫЙ ${shedDays !== null ? `(день ${shedDays})` : ''}</span>`
+                : '';
+
+            // "Съедено" и "Частично" (съедено > 0) считаются как факт кормления для маркера "сыт"
+            let statusTagHtml = `<span class="status-tag hungry">Голоден / Отказ</span>`;
+            if(a.feed_logs && a.feed_logs.length > 0) {
+                let lastFeed = a.feed_logs[a.feed_logs.length - 1];
+                const wasFed = (lastFeed.status === 'Съедено' || lastFeed.status === 'Частично') && lastFeed.eatenCount > 0;
+                if(wasFed && (nowMs - Number(lastFeed.timestamp) < limitMs)) {
+                    let leftHrs = Math.ceil((limitMs - (nowMs - Number(lastFeed.timestamp))) / (60 * 60 * 1000));
+                    statusTagHtml = `<span class="status-tag fed">Сыт: осталось ${leftHrs} ч.</span>`;
+                }
+            }
+
+            // --- Разрешение статуса "оставлен на ночь" — по каждой особи отдельно ---
+            let nightResolveHtml = '';
+            (a.feed_logs || []).forEach((log, logIdx) => {
+                if (log.status !== 'Оставлен на ночь') return;
+                nightResolveHtml += `
+                    <div class="night-resolve-box">
+                        <strong style="color:var(--gold); font-size:0.78rem;">⚠️ Оставлено на ночь: ${FEED_TYPE_LABELS[log.type]} [№${log.sizeNum}] ${log.sizeTitle} — ${log.count} шт.</strong>
+                        <div style="display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap;">
+                            <label style="font-size:0.75rem;">Съедено:</label>
+                            <input type="number" id="night-eaten-${idx}-${logIdx}" min="0" max="${log.count}" value="${log.count}" style="width:60px;" oninput="document.getElementById('night-reason-wrap-${idx}-${logIdx}').style.display = (parseInt(this.value)||0) < ${log.count} ? 'block' : 'none';">
+                            <span style="font-size:0.75rem;">из ${log.count}</span>
+                        </div>
+                        <div id="night-reason-wrap-${idx}-${logIdx}" style="display:none; margin-top:6px;">
+                            <input type="text" id="night-reason-${idx}-${logIdx}" placeholder="Причина отказа/недоедания (необязательно)" style="width:100%; box-sizing:border-box;">
+                        </div>
+                        <button class="btn-main" style="background:var(--green); padding:6px; margin-top:6px; margin-bottom:0; font-size:0.75rem;" onclick="resolveNightFeedForAnimal(${idx}, ${logIdx})">✔ Зафиксировать результат</button>
+                    </div>`;
+            });
+
+            // --- Полная история кормлений (без ограничения по количеству записей) ---
+            let feedLogHtml = '';
+            if(a.feed_logs && a.feed_logs.length > 0) {
+                feedLogHtml += `<div class="history-box"><strong>🍖 История кормлений:</strong>`;
+                a.feed_logs.slice().reverse().forEach((log, lIdx) => {
+                    let realActualIdx = a.feed_logs.length - 1 - lIdx;
+                    let badgeColor = log.status === 'Съедено' ? 'var(--green)' : log.status === 'Отказ' ? 'var(--red)' : log.status === 'Частично' ? 'var(--gold)' : '#888';
+                    const eatenText = (log.eatenCount === null || log.eatenCount === undefined) ? '' : ` — съедено ${log.eatenCount} из ${log.count}`;
+                    const reasonText = log.refusalReason ? `<div style="font-size:0.68rem; color:#e57373;">Причина: ${log.refusalReason}</div>` : '';
+                    feedLogHtml += `
+                        <div class="log-row">
+                            <div style="flex:1;">
+                                <span>${formatLogDateTime(log.timestamp, log.date)} — ${FEED_TYPE_LABELS[log.type] || log.type} [№${log.sizeNum}] ${log.sizeTitle} (${log.count} шт)${eatenText} <b style="color:${badgeColor}">[${log.status}]</b></span>
+                                ${reasonText}
+                            </div>
+                            <div style="display:flex; gap:4px;">
+                                ${log.status === 'Съедено' ? `<button class="btn-del" style="background:var(--gold); padding:2px 6px; font-size:0.65rem;" onclick="setLogStatus(${idx}, ${realActualIdx}, 'Отказ')">Отказ</button>` : ''}
+                                <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteLogItem(${idx}, ${realActualIdx})">✖</button>
+                            </div>
+                        </div>`;
+                });
+                feedLogHtml += `</div>`;
+            }
+
+            // --- Полная история линек (симметрично кормлениям), с редактированием и удалением задним числом ---
+            let shedLogHtml = '';
+            if(a.shed_logs && a.shed_logs.length > 0) {
+                shedLogHtml += `<div class="history-box"><strong>🦎 История линек:</strong>`;
+                a.shed_logs.slice().reverse().forEach((log, lIdx) => {
+                    let realActualIdx = a.shed_logs.length - 1 - lIdx;
+                    shedLogHtml += `
+                        <div class="log-row">
+                            <input type="date" value="${log.date}" onchange="updateShedLogField(${idx}, ${realActualIdx}, 'date', this.value)" style="width:130px; font-size:0.7rem;">
+                            <select onchange="updateShedLogField(${idx}, ${realActualIdx}, 'status', this.value)" style="font-size:0.7rem; padding:2px;">
+                                <option value="Помутнение" ${log.status==='Помутнение'?'selected':''}>Помутнение</option>
+                                <option value="Норма" ${log.status==='Норма'?'selected':''}>Норма</option>
+                                <option value="Кусками" ${log.status==='Кусками'?'selected':''}>Кусками</option>
+                                <option value="Вручную" ${log.status==='Вручную'?'selected':''}>Вручную</option>
+                            </select>
+                            <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteShedLog(${idx}, ${realActualIdx})">✖</button>
+                        </div>`;
+                });
+                shedLogHtml += `</div>`;
+            }
+
+            list.innerHTML += `
+                <div class="animal-item">
+                    <div style="font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
+                        <span>${a.species} <span style="color:var(--gold)">${a.gender}</span> ${shedBadge}</span>
+                        ${statusTagHtml}
+                    </div>
+                    <div style="font-size:0.8rem; color:#aaa; margin-bottom: 8px;">Возраст: ${formatAge(a)}</div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn-main" style="padding:6px 10px; font-size:0.75rem; margin:0; background: #555;" onclick="openSheddingModal(${idx})">🦎 ЛИНЬКА</button>
+                        <button class="btn-main" style="padding:6px 10px; font-size:0.75rem; margin:0; background:#37474f;" onclick="openAnimalReport(${idx})">📊 ОТЧЁТ</button>
+                        <button class="edit-ui btn-opt" style="padding:6px 10px; font-size:0.75rem" onclick="openAnimalForm(${idx})">ПРАВКА</button>
+                        <button class="edit-ui btn-opt" style="padding:6px 10px; font-size:0.75rem; background:var(--purple);" onclick="openTransferModal(${idx})">🚚 ПЕРЕЕЗД</button>
+                        <button class="edit-ui btn-del" style="padding:6px 10px; font-size:0.75rem" onclick="removeAnimal(${idx})">ВЫСЕЛИТЬ</button>
+                    </div>
+                    ${nightResolveHtml}
+                    ${feedLogHtml}
+                    ${shedLogHtml}
+                </div>`;
+        });
+        document.getElementById('cell-bulk-feed-btn').style.display = cell.animals.length > 0 ? 'block' : 'none';
+    }
+
+    function setLogStatus(animalIdx, logIdx, newStatus) {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        let log = cell.animals[animalIdx].feed_logs[logIdx];
+        log.status = newStatus;
+        // count больше НЕ обнуляется: это расход/утилизация КО (умерщвлены заранее независимо от поедания).
+        if(newStatus === 'Отказ') log.eatenCount = 0;
+        else if(newStatus === 'Съедено') log.eatenCount = log.count;
+        save(); openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    function deleteLogItem(animalIdx, logIdx) {
+        if(confirm("Удалить эту запись кормления? Вес вычтется из отчетов.")) {
+            const cell = getCell(state.locId, state.blockId, state.cellIdx);
+            cell.animals[animalIdx].feed_logs.splice(logIdx, 1);
+            save(); openCell(state.locId, state.blockId, state.cellIdx);
+        }
+    }
+
+    function handleSpeciesInput(input) {
+        const val = input.value.toLowerCase();
+        const container = document.getElementById('species-suggestions'); container.innerHTML = '';
+        if(!val) { container.style.display = 'none'; return; }
+        const matches = SPECIES_BANK.filter(s => s.r.toLowerCase().includes(val) || s.l.toLowerCase().includes(val));
+        if(matches.length === 0) {
+            container.innerHTML = `<div class="suggestion-item" onmousedown="selectCustomSpecies('${input.value}')"><i>Ввести вручную: "${input.value}"</i></div>`;
+        } else {
+            matches.slice(0, 10).forEach(m => {
+                container.innerHTML += `<div class="suggestion-item" onmousedown="selectSpecies('${m.r} (${m.l})')"><strong>${m.r}</strong></div>`;
+            });
+        }
+        container.style.display = 'block';
+    }
+    function selectSpecies(str) { document.getElementById('a-species').value = str; document.getElementById('species-suggestions').style.display = 'none'; }
+    function selectCustomSpecies(str) { document.getElementById('a-species').value = str; document.getElementById('species-suggestions').style.display = 'none'; }
+    function hideSuggestionsWithDelay() { setTimeout(() => { document.getElementById('species-suggestions').style.display = 'none'; }, 200); }
+
+    function openAnimalForm(idx) {
+        state.animalIdx = idx;
+        document.querySelectorAll('.btn-opt').forEach(b => b.classList.remove('active'));
+        if(idx !== null) {
+            const a = getCell(state.locId, state.blockId, state.cellIdx).animals[idx];
+            document.getElementById('a-species').value = a ? a.species : '';
+            if(a) {
+                document.querySelector(`.g-opt[data-val="${a.gender}"]`)?.classList.add('active');
+                document.querySelector(`.a-opt[data-val="${a.age}"]`)?.classList.add('active');
+                document.getElementById('a-birth-month').value = a.birthMonth || '';
+                document.getElementById('a-birth-year').value = a.birthYear || '';
+            }
+        } else {
+            document.getElementById('a-species').value = '';
+            document.getElementById('g-opt-u').classList.add('active');
+            document.getElementById('a-opt-a').classList.add('active');
+            document.getElementById('a-birth-month').value = '';
+            document.getElementById('a-birth-year').value = '';
+        }
+        document.getElementById('modal-animal-form').style.display = 'block';
+    }
+
+    function saveAnimal() {
+        const species = document.getElementById('a-species').value;
+        if(!species) return alert("Введите вид");
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const data = {
+            species, gender: document.querySelector('.g-opt.active')?.dataset.val || '○',
+            age: document.querySelector('.a-opt.active')?.dataset.val || 'Ad.',
+            birthMonth: document.getElementById('a-birth-month').value,
+            birthYear: document.getElementById('a-birth-year').value
+        };
+        if(state.animalIdx !== null) { cell.animals[state.animalIdx] = { ...cell.animals[state.animalIdx], ...data }; } 
+        else { cell.animals.push({ ...data, feed_logs: [], shed_logs: [], shed_status: 'Норма' }); }
+        save(); closeModals(); openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    function selectOpt(el, cls) { document.querySelectorAll('.' + cls).forEach(b => b.classList.remove('active')); el.classList.add('active'); }
+    function updateCellLabel() { getCell(state.locId, state.blockId, state.cellIdx).label = document.getElementById('cell-label-edit').value; save(); }
+
+    function updateCellWidth() {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        cell.width = parseFloat(document.getElementById('cell-width-edit').value) || 1;
+        save();
+    }
+
+    function toggleCellService() {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const checkbox = document.getElementById('cell-service-edit');
+        if (checkbox.checked && cell.animals && cell.animals.length > 0) {
+            alert("Нельзя пометить ячейку как сервисное место, пока в ней есть заселённые животные. Сначала выселите их.");
+            checkbox.checked = false;
+            return;
+        }
+        cell.isService = checkbox.checked;
+        save();
+        openCell(state.locId, state.blockId, state.cellIdx); // перерисовать модалку (показать/скрыть кнопки заселения)
+    }
+
+    function openBulkFeedForm() {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        if(cell.animals.length === 1) { state.selectedBulkIdxs = [0]; proceedToFeedForm(); } 
+        else {
+            const container = document.getElementById('bulk-feed-checkboxes'); container.innerHTML = '';
+            cell.animals.forEach((a, idx) => {
+                container.innerHTML += `<div class="checkbox-row"><input type="checkbox" id="chk-a-${idx}" value="${idx}" checked> <label for="chk-a-${idx}">${a.species} [${a.gender}]</label></div>`;
+            });
+            showModal('modal-bulk-feed-select');
+        }
+    }
+
+    function proceedToFeedForm() {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        if(cell.animals.length > 1) {
+            state.selectedBulkIdxs = [];
+            cell.animals.forEach((_, idx) => { if(document.getElementById(`chk-a-${idx}`).checked) state.selectedBulkIdxs.push(idx); });
+        }
+        if(state.selectedBulkIdxs.length === 0) return alert("Никто не выбран");
+        document.getElementById('feed-type').value = 'RATS'; renderFeedSizes();
+        document.getElementById('feed-night-mode').checked = false;
+        document.getElementById('modal-bulk-feed-select').style.display = 'none';
+        showModal('modal-feed');
+    }
+
+    function renderFeedSizes() {
+        const type = document.getElementById('feed-type').value;
+        const select = document.getElementById('feed-size'); select.innerHTML = '';
+        let source = type === 'RATS' ? RATS : type === 'MICE' ? MICE : RABBITS;
+        source.forEach(item => { select.innerHTML += `<option value="${item.n}">[№${item.n}] ${item.t} (~${item.w}г)</option>`; });
+    }
+
+    function saveFeeding() {
+        const type = document.getElementById('feed-type').value;
+        const sizeNum = parseInt(document.getElementById('feed-size').value);
+        const count = parseInt(document.getElementById('feed-count').value) || 1;
+        const isNight = document.getElementById('feed-night-mode').checked;
+        
+        let source = type === 'RATS' ? RATS : type === 'MICE' ? MICE : RABBITS;
+        let item = source.find(i => i.n === sizeNum);
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+
+        state.selectedBulkIdxs.forEach(idx => {
+            let animal = cell.animals[idx];
+            if(!animal.feed_logs) animal.feed_logs = [];
+            
+            let newLog = {
+                timestamp: Date.now(), 
+                date: new Date().toISOString().slice(0,10),
+                type: type, 
+                sizeNum: sizeNum, 
+                sizeTitle: item.t, 
+                weightUnit: item.w, 
+                count: count,
+                // eatenCount: сколько реально съедено. При немедленном кормлении считаем съеденным сразу всё;
+                // частичное поедание фиксируется только для варианта "оставлен на ночь" — через resolveNightFeedForAnimal().
+                eatenCount: isNight ? null : count,
+                refusalReason: '',
+                status: isNight ? 'Оставлен на ночь' : 'Съедено'
+            };
+            animal.feed_logs.push(newLog);
+        });
+        
+        save(); // было localStorage.setItem(...) напрямую — цветовой маркер на стеллаже не обновлялся сразу
+        closeModals(); 
+        openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    // Разрешение статуса "оставлен на ночь" — теперь по каждой особи отдельно (v1.5.1).
+    // eatenCount может быть меньше count (частичное поедание); count всегда остаётся как есть —
+    // это расход/утилизация КО, которые умерщвляются заранее независимо от того, съедены они или нет.
+    function resolveNightFeedForAnimal(animalIdx, logIdx) {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const animal = cell.animals[animalIdx];
+        const log = animal.feed_logs[logIdx];
+        if (!log) return;
+
+        const input = document.getElementById(`night-eaten-${animalIdx}-${logIdx}`);
+        let eaten = input ? parseInt(input.value) : log.count;
+        if (isNaN(eaten) || eaten < 0) eaten = 0;
+        if (eaten > log.count) eaten = log.count;
+
+        log.eatenCount = eaten;
+        log.status = eaten >= log.count ? 'Съедено' : (eaten === 0 ? 'Отказ' : 'Частично');
+        if (eaten < log.count) {
+            const reasonInput = document.getElementById(`night-reason-${animalIdx}-${logIdx}`);
+            log.refusalReason = reasonInput ? reasonInput.value.trim() : '';
+        } else {
+            log.refusalReason = '';
+        }
+        log.timestamp = Date.now(); // момент фиксации результата — от него считается срок "маркера сытости"
+
+        save();
+        openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    function openSheddingModal(idx) { state.animalIdx = idx; showModal('modal-shedding'); }
+    function setSheddingStatus(status) {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const animal = cell.animals[state.animalIdx];
+        animal.shed_status = status;
+        if(!animal.shed_logs) animal.shed_logs = [];
+        animal.shed_logs.push({ date: new Date().toISOString().slice(0,10), status, timestamp: Date.now() });
+        save(); closeModals(); openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    // Редактирование записи линьки задним числом (дата и/или статус).
+    // Если правится последняя запись — она же переопределяет текущий статус животного (для подсветки/бейджа).
+    function updateShedLogField(animalIdx, logIdx, field, value) {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const animal = cell.animals[animalIdx];
+        const log = animal.shed_logs[logIdx];
+        if (!log) return;
+        log[field] = value;
+        if (field === 'date') { const parsed = Date.parse(value); if (!isNaN(parsed)) log.timestamp = parsed; }
+        if (logIdx === animal.shed_logs.length - 1) animal.shed_status = animal.shed_logs[animal.shed_logs.length - 1].status;
+        save(); openCell(state.locId, state.blockId, state.cellIdx);
+    }
+    function deleteShedLog(animalIdx, logIdx) {
+        if (!confirm("Удалить эту запись линьки?")) return;
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const animal = cell.animals[animalIdx];
+        animal.shed_logs.splice(logIdx, 1);
+        animal.shed_status = animal.shed_logs.length > 0 ? animal.shed_logs[animal.shed_logs.length - 1].status : 'Норма';
+        save(); openCell(state.locId, state.blockId, state.cellIdx);
+    }
+    // Сколько дней прошло с момента фиксации "Помутнение" (для напоминалки об ожидаемой линьке через 3-5 дней)
+    function getShedWarningDays(animal) {
+        if (!animal || animal.shed_status !== 'Помутнение' || !animal.shed_logs || animal.shed_logs.length === 0) return null;
+        const lastLog = animal.shed_logs[animal.shed_logs.length - 1];
+        const startMs = lastLog.timestamp || Date.parse(lastLog.date) || Date.now();
+        return Math.max(0, Math.floor((Date.now() - startMs) / (24 * 60 * 60 * 1000)));
+    }
+
+    function openTransferModal(idx) {
+        state.animalIdx = idx;
+        const locSelect = document.getElementById('transfer-loc'); locSelect.innerHTML = '';
+        db.forEach(l => locSelect.innerHTML += `<option value="${l.id}">${l.name}</option>`);
+        renderTransferBlocks(); showModal('modal-transfer');
+    }
+    function renderTransferBlocks() {
+        const locId = parseInt(document.getElementById('transfer-loc').value);
+        const blockSelect = document.getElementById('transfer-block'); blockSelect.innerHTML = '';
+        const loc = db.find(l => l.id === locId);
+        if(loc) loc.blocks.forEach(b => blockSelect.innerHTML += `<option value="${b.id}">${b.name}</option>`);
+        renderTransferCells();
+    }
+    function renderTransferCells() {
+        const locId = parseInt(document.getElementById('transfer-loc').value);
+        const blockId = parseInt(document.getElementById('transfer-block').value);
+        const cellSelect = document.getElementById('transfer-cell'); cellSelect.innerHTML = '';
+        const block = db.find(l => l.id === locId)?.blocks.find(b => b.id === blockId);
+        if(block) getBlockCells(block).forEach((c, idx) => {
+            if (c.isService) return; // в сервисное место животных переселить нельзя
+            const pos = locateCellPosition(block, idx);
+            const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+            cellSelect.innerHTML += `<option value="${idx}">${address}${c.label ? ' — ' + c.label : ''}</option>`;
+        });
+    }
+    function executeTransfer() {
+        const targetLocId = parseInt(document.getElementById('transfer-loc').value);
+        const targetBlockId = parseInt(document.getElementById('transfer-block').value);
+        const targetCellIdx = parseInt(document.getElementById('transfer-cell').value);
+        const currentCell = getCell(state.locId, state.blockId, state.cellIdx);
+        const targetCell = getCell(targetLocId, targetBlockId, targetCellIdx);
+        
+        let movingAnimal = currentCell.animals.splice(state.animalIdx, 1)[0];
+        targetCell.animals.push(movingAnimal);
+        alert("Особь успешно переведена."); save(); closeModals();
+    }
+
+    function deleteLogDirectly(locId, blockId, cellIdx, animalIdx, logTimestamp) {
+        if(confirm("Удалить это кормление особи? Данные мгновенно обновятся.")) {
+            const cell = getCell(locId, blockId, cellIdx);
+            const animal = cell.animals[animalIdx];
+            if(animal && animal.feed_logs) {
+                animal.feed_logs = animal.feed_logs.filter(l => Number(l.timestamp) !== Number(logTimestamp));
+                save();
+                showLocationStats(locId); 
+            }
+        }
+    }
+
+    function showLocationStats(locId) {
+        const loc = db.find(l => l.id === locId);
+        document.getElementById('stats-title').innerText = `Учёт кормов: ${loc.name}`;
+        
+        let summary = {};
+        let txtData = `ОТЧЕТ ПО РАСХОДУ КО: ${loc.name.toUpperCase()}\nСгенерирован: ${new Date().toLocaleDateString()}\n\n`;
+        
+        let journalRowsHtml = '';
+
+        loc.blocks.forEach(block => {
+            getBlockCells(block).forEach((cell, cIdx) => {
+                if (cell.isService) return; // сервисные места не участвуют в статистике
+                const pos = locateCellPosition(block, cIdx);
+                const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+                cell.animals.forEach((animal, aIdx) => {
+                    if(animal.feed_logs) {
+                        animal.feed_logs.forEach(log => {
+                            if(log.status === 'Съедено') {
+                                let key = `${log.type}_${log.sizeNum}`;
+                                if(!summary[key]) summary[key] = { type: log.type, num: log.sizeNum, title: log.sizeTitle, count: 0, total_w: 0 };
+                                summary[key].count += log.count;
+                                summary[key].total_w += (log.weightUnit * log.count);
+
+                                let currentBiomass = (log.weightUnit * log.count).toFixed(0) + ' г';
+                                journalRowsHtml += `
+                                    <tr>
+                                        <td style="white-space:nowrap; font-size:0.72rem; color:#aaa;">${formatLogDateTime(log.timestamp, log.date)}</td>
+                                        <td>${block.name}, яч. ${address}</td>
+                                        <td><b>${animal.species}</b> [${animal.gender}]</td>
+                                        <td>[№${log.sizeNum}] ${FEED_TYPE_LABELS[log.type]} (${log.sizeTitle})</td>
+                                        <td>${log.count} шт (${currentBiomass})</td>
+                                        <td><button class="btn-del" style="padding:2px 6px; font-size:0.7rem; background:var(--red);" onclick="deleteLogDirectly(${loc.id}, ${block.id}, ${cIdx}, ${aIdx}, ${log.timestamp})">✖</button></td>
+                                    </tr>`;
+                            }
+                        });
+                    }
+                });
+            });
+        });
+
+        let speciesSummary = {};
+        loc.blocks.forEach(block => {
+            getBlockCells(block).forEach(cell => {
+                if (cell.isService) return; // сервисные места не участвуют в статистике
+                cell.animals.forEach(a => {
+                    if(a.feed_logs) {
+                        a.feed_logs.forEach(log => {
+                            if(log.status === 'Съедено') {
+                                if(!speciesSummary[a.species]) speciesSummary[a.species] = [];
+                                let existing = speciesSummary[a.species].find(item => item.type === log.type && item.num === log.sizeNum);
+                                if(existing) { existing.count += log.count; } 
+                                else { speciesSummary[a.species].push({ type: log.type, num: log.sizeNum, title: log.sizeTitle, count: log.count }); }
+                            }
+                        });
+                    }
+                });
+            });
+        });
+
+        for(let sp in speciesSummary) {
+            txtData += `Вид: ${sp}\n`;
+            speciesSummary[sp].forEach(item => {
+                txtData += `  * ${FEED_TYPE_LABELS[item.type]} [№${item.num}] ${item.title} — ${item.count} шт.\n`;
+            });
+            txtData += `\n`;
+        }
+
+        const container = document.getElementById('stats-data');
+        if(Object.keys(summary).length === 0 && journalRowsHtml === '') { 
+            container.innerHTML = '<p>В этой комнате еще нет записей о съеденных кормах.</p>'; 
+        } else {
+            let html = `<h5 style="color:var(--blue); margin-bottom:5px;">📊 1. Сводный расход КО по типам</h5>`;
+            html += '<table class="stat-table"><thead><tr><th>Размер КО</th><th>Кол-во</th><th>Биомасса</th></tr></thead><tbody>';
+            for(let k in summary) {
+                let s = summary[k];
+                let weightKg = s.total_w >= 1000 ? (s.total_w / 1000).toFixed(2) + ' кг' : s.total_w.toFixed(0) + ' г';
+                html += `<tr><td><strong>[№${s.num}]</strong> ${FEED_TYPE_LABELS[s.type]} (${s.title})</td><td>${s.count} шт.</td><td>${weightKg}</td></tr>`;
+            }
+            html += '</tbody></table>';
+
+            html += `<h5 style="color:var(--purple); margin-top:20px; margin-bottom:5px;">📋 2. Детальный журнал выдачи по особям</h5>`;
+            html += '<div style="max-height:250px; overflow-y:auto; border:1px solid #444; border-radius:6px;">';
+            html += '<table class="stat-table" style="margin:0; width:100%;"><thead><tr><th>Дата/время</th><th>Место</th><th>Животное</th><th>КО</th><th>Выдано</th><th>Удал.</th></tr></thead><tbody>';
+            html += journalRowsHtml;
+            html += '</tbody></table></div>';
+            
+            window.currentTxtReport = txtData;
+            html += `<button class="btn-main" style="background:var(--purple); margin-top:15px;" onclick="downloadTxtReport()">📥 Скачать отчёт по видам (.TXT)</button>`;
+            html += `<button class="btn-main" style="background:#37474f;" onclick="openWeeklyReport(${locId})">📅 Отчёт за неделю (HTML)</button>`;
+            html += `<button class="btn-main" style="background:#37474f;" onclick="openFullLocationReport(${locId})">📚 Полный отчёт по всем животным (HTML)</button>`;
+            container.innerHTML = html;
+        }
+        showModal('modal-stats');
+    }
+
+    function downloadTxtReport() {
+        if(!window.currentTxtReport) return;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([window.currentTxtReport], {type: "text/plain;charset=utf-8"}));
+        a.download = `report_ko_${Date.now()}.txt`; a.click();
+    }
+
+    // ==================== ОТЧЁТЫ (v1.5.1): по особи / недельный / полный по локации ====================
+
+    function wrapReportDocument(title, bodyHtml) {
+        return `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>${title}</title>
+<style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#222;padding:20px;max-width:900px;margin:0 auto;}
+    h1{color:#1976d2;} h2{color:#444;border-bottom:2px solid #1976d2;padding-bottom:4px;margin-top:30px;}
+    h3{color:#37474f;margin-top:25px; margin-bottom:5px;}
+    table.rep-table{border-collapse:collapse;width:100%;margin-bottom:18px;font-size:0.85rem;}
+    table.rep-table th,table.rep-table td{border:1px solid #ccc;padding:6px 8px;text-align:left;}
+    table.rep-table th{background:#f0f0f0;}
+    .meta{color:#777;font-size:0.85rem;margin-bottom:20px;}
+</style></head><body>
+<h1>${title}</h1>
+<div class="meta">Сформировано: ${new Date().toLocaleString('ru-RU')}</div>
+${bodyHtml}
+</body></html>`;
+    }
+
+    // Полная таблица истории (кормления + линьки) одной особи — используется и в отчёте по животному, и в общем отчёте по локации
+    function buildAnimalHistoryHtml(animal, address, blockName) {
+        let feedRows = '';
+        (animal.feed_logs || []).slice().reverse().forEach(log => {
+            const eaten = (log.eatenCount === null || log.eatenCount === undefined) ? '—' : log.eatenCount;
+            feedRows += `<tr>
+                <td>${formatLogDateTime(log.timestamp, log.date)}</td>
+                <td>${FEED_TYPE_LABELS[log.type] || log.type} [№${log.sizeNum}] ${log.sizeTitle}</td>
+                <td>${log.count}</td>
+                <td>${eaten}</td>
+                <td>${log.status}</td>
+                <td>${log.refusalReason || ''}</td>
+            </tr>`;
+        });
+        let shedRows = '';
+        (animal.shed_logs || []).slice().reverse().forEach(log => {
+            shedRows += `<tr><td>${formatLogDateTime(log.timestamp, log.date)}</td><td>${log.status}</td></tr>`;
+        });
+        return `
+            <h3>${animal.species} [${animal.gender}] — ${blockName}, место ${address}</h3>
+            <table class="rep-table">
+                <thead><tr><th>Дата/время</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Статус</th><th>Причина отказа</th></tr></thead>
+                <tbody>${feedRows || '<tr><td colspan="6">Нет записей о кормлении</td></tr>'}</tbody>
+            </table>
+            <table class="rep-table">
+                <thead><tr><th>Дата/время</th><th>Статус линьки</th></tr></thead>
+                <tbody>${shedRows || '<tr><td colspan="2">Нет записей о линьке</td></tr>'}</tbody>
+            </table>`;
+    }
+
+    function showReportModal(title, bodyHtml, filename) {
+        document.getElementById('report-title-ui').innerText = title;
+        document.getElementById('report-preview').innerHTML = bodyHtml;
+        window.currentHtmlReport = wrapReportDocument(title, bodyHtml);
+        window.currentHtmlReportFilename = filename;
+        showModal('modal-report');
+    }
+
+    function downloadCurrentHtmlReport() {
+        if (!window.currentHtmlReport) return;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([window.currentHtmlReport], {type: "text/html;charset=utf-8"}));
+        a.download = window.currentHtmlReportFilename || `report_${Date.now()}.html`;
+        a.click();
+    }
+
+    // Отчёт по одной особи (кнопка "📊 ОТЧЁТ" в карточке ячейки)
+    function openAnimalReport(animalIdx) {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const block = db.find(l => l.id === state.locId).blocks.find(b => b.id === state.blockId);
+        const pos = locateCellPosition(block, state.cellIdx);
+        const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+        const animal = cell.animals[animalIdx];
+        const bodyHtml = buildAnimalHistoryHtml(animal, address, block.name);
+        showReportModal(`Отчёт по особи: ${animal.species}`, bodyHtml, `report_${animal.species.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.html`);
+    }
+
+    // Агрегированный отчёт за последние 7 дней (скользящее окно) по локации
+    function openWeeklyReport(locId) {
+        const loc = db.find(l => l.id === locId);
+        const weekMs = 7 * 24 * 60 * 60 * 1000;
+        const cutoff = Date.now() - weekMs;
+        let summary = {};
+        let totalEatenBiomass = 0, totalWrittenOffBiomass = 0;
+
+        loc.blocks.forEach(block => {
+            getBlockCells(block).forEach(cell => {
+                if (cell.isService) return;
+                cell.animals.forEach(a => {
+                    (a.feed_logs || []).forEach(log => {
+                        if (Number(log.timestamp) < cutoff) return;
+                        if (log.status === 'Оставлен на ночь') return; // ещё не разрешено — не учитываем в итоге недели
+                        const key = `${a.species}_${log.type}_${log.sizeNum}`;
+                        if (!summary[key]) summary[key] = { species: a.species, type: log.type, num: log.sizeNum, title: log.sizeTitle, eaten: 0, written: 0 };
+                        const eaten = (log.eatenCount !== null && log.eatenCount !== undefined) ? log.eatenCount : (log.status === 'Съедено' ? log.count : 0);
+                        summary[key].eaten += eaten;
+                        summary[key].written += log.count;
+                        totalEatenBiomass += eaten * log.weightUnit;
+                        totalWrittenOffBiomass += log.count * log.weightUnit;
+                    });
+                });
+            });
+        });
+
+        const rows = Object.values(summary).map(s => `
+            <tr><td>${s.species}</td><td>${FEED_TYPE_LABELS[s.type] || s.type} [№${s.num}] ${s.title}</td><td>${s.eaten}</td><td>${s.written}</td></tr>`).join('');
+
+        const fmtWeight = (g) => g >= 1000 ? (g / 1000).toFixed(2) + ' кг' : g.toFixed(0) + ' г';
+        const bodyHtml = `
+            <p>Локация: <b>${loc.name}</b>. Период: последние 7 дней (${new Date(cutoff).toLocaleDateString('ru-RU')} — ${new Date().toLocaleDateString('ru-RU')}).</p>
+            <p>Итого съедено (биомасса питания): <b>${fmtWeight(totalEatenBiomass)}</b> &nbsp;|&nbsp; Итого списано КО (расход/утилизация): <b>${fmtWeight(totalWrittenOffBiomass)}</b></p>
+            <table class="rep-table">
+                <thead><tr><th>Вид животного</th><th>Кормовой объект</th><th>Съедено, шт</th><th>Списано КО, шт</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="4">Нет кормлений за последние 7 дней</td></tr>'}</tbody>
+            </table>`;
+        showReportModal(`Недельный отчёт — ${loc.name}`, bodyHtml, `weekly_report_${loc.name.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.html`);
+    }
+
+    // Полный отчёт по всем животным локации сразу (вся история кормлений и линек каждой особи)
+    function openFullLocationReport(locId) {
+        const loc = db.find(l => l.id === locId);
+        let bodyHtml = `<p>Локация: <b>${loc.name}</b>. Полная история по всем заселённым животным.</p>`;
+        let animalCount = 0;
+        loc.blocks.forEach(block => {
+            getBlockCells(block).forEach((cell, cIdx) => {
+                if (cell.isService) return;
+                const pos = locateCellPosition(block, cIdx);
+                const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+                cell.animals.forEach(animal => {
+                    animalCount++;
+                    bodyHtml += buildAnimalHistoryHtml(animal, address, block.name);
+                });
+            });
+        });
+        if (animalCount === 0) bodyHtml += `<p>В этой локации нет заселённых животных.</p>`;
+        showReportModal(`Полный отчёт — ${loc.name}`, bodyHtml, `full_report_${loc.name.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.html`);
+    }
+
+    function showModal(id) {
+        const el = document.getElementById(id);
+        el.style.display = el.classList.contains('sheet-modal') ? 'flex' : 'block';
+    }
+    function updateUIElements() { document.querySelectorAll('.edit-ui').forEach(el => el.style.display = isLocked ? 'none' : 'block'); }
+
+    function render() {
+        const app = document.getElementById('app'); app.innerHTML = '';
+        const nowMs = Date.now();
+        const limitMs = FED_INDICATOR_MS;
+
+        db.forEach(loc => {
+            const isPreviewingThisLoc = calendarPreview && calendarPreview.locId === loc.id;
+            // При просмотре по дате локация автоматически разворачивается — иначе подсветку стеллажей не будет видно
+            const isCollapsed = collapsedLocs.has(loc.id) && !isPreviewingThisLoc;
+
+            let html = `
+                <div class="location">
+                    <div class="location-title">
+                        <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0; cursor:pointer;" onclick="toggleLocationCollapse(${loc.id})">
+                            <span class="loc-collapse-arrow">${isCollapsed ? '▸' : '▾'}</span>
+                            <b style="font-size:1.15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" onclick="event.stopPropagation(); if(!isLocked) showModalLocation(${loc.id});">${loc.name}</b>
+                        </div>
+                        <button class="btn-del edit-ui" onclick="deleteLoc(${loc.id})">Удалить комнату</button>
+                    </div>`;
+
+            if (isCollapsed) {
+                html += `<div class="loc-summary-collapsed" onclick="toggleLocationCollapse(${loc.id})">${getLocationSummary(loc)}</div>`;
+                app.innerHTML += html + `</div>`;
+                return;
+            }
+
+            html += `
+                    <div class="loc-actions">
+                        <button class="btn-main" style="margin:0; padding:10px; font-size:0.8rem; background:#333;" onclick="showLocationStats(${loc.id})">📈 СТАТИСТИКА И ОТЧЁТЫ</button>
+                        <button class="btn-main" style="margin:0; padding:10px; font-size:0.8rem; background:#37474f;" onclick="openLocationCalendar(${loc.id})">📅 КАЛЕНДАРЬ</button>
+                        <button class="btn-sec edit-ui" style="margin:0; padding:10px; font-size:0.8rem; background: var(--blue);" onclick="openBlockModal(${loc.id}, null)">+ Стеллаж / Ряд</button>
+                    </div>`;
+
+            if (isPreviewingThisLoc) {
+                html += `
+                    <div class="cal-preview-banner">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <strong style="color:var(--gold);">📅 Показ на ${calendarPreview.date}</strong>
+                        </div>
+                        <div class="cal-preview-actions">
+                            <button class="btn-sec" style="margin:0; padding:6px 10px; font-size:0.75rem;" onclick="changePreviewDate()">Сменить дату</button>
+                            <button class="btn-sec" style="margin:0; padding:6px 10px; font-size:0.75rem;" onclick="exitCalendarPreview()">Вернуться к текущему виду</button>
+                        </div>
+                        <div class="cal-legend">
+                            ${Object.keys(CAL_LABELS).map(k => `<span class="cal-legend-item"><span class="cal-legend-swatch" style="border-color:${CAL_COLORS[k]}; ${k === 'pending' ? 'border-style:dashed;' : ''}"></span>${CAL_LABELS[k]}</span>`).join('')}
+                        </div>
+                    </div>`;
+            }
+            
+            loc.blocks.forEach(block => {
+                html += `
+                    <div class="block-unit">
+                        <div class="block-header">
+                            <span onclick="isLocked ? null : openBlockModal(${loc.id}, ${block.id})">${block.name} <span style="font-size:0.75rem; color:#777;">[${block.type}]</span></span>
+                            <span class="edit-ui" style="color:var(--red); font-size:1.2rem; cursor:pointer;" onclick="deleteBlock(${loc.id}, ${block.id})">✖</span>
+                        </div>
+                        <div class="rack"><div class="rack-inner">`;
+
+                // Адрес места = буква ряда (A,B,C...) + номер места в ряду (1,2,3...), вычисляется на лету
+                let flatIdx = 0;
+                (block.rows || []).forEach((row, rIdx) => {
+                    html += `<div class="shelf-row">
+                        <div class="row-label edit-ui">
+                            <span>${rowLetter(rIdx)}</span>
+                            <span class="row-del-btn" onclick="deleteRow(${loc.id}, ${block.id}, ${rIdx})">✖</span>
+                        </div>`;
+
+                    (row.cells || []).forEach((cell, cIdxInRow) => {
+                        const idx = flatIdx;
+                        const address = getCellAddress(rIdx, cIdxInRow);
+                        const width = cell.width || 1;
+                        const labelHtml = cell.label ? `<div class="cell-label">${cell.label}</div>` : '';
+
+                        if (cell.isService) {
+                            html += `
+                                <div class="cell service-cell" style="--cw:${width};" data-loc="${loc.id}" data-block="${block.id}" data-row="${rIdx}" data-cellidx="${cIdxInRow}" data-flat="${idx}">
+                                    <div class="cell-num">⚙ ${address}</div>
+                                    <div class="cell-info">${cell.label || 'сервис'}</div>
+                                </div>`;
+                            flatIdx++;
+                            return;
+                        }
+
+                        const hasAnimals = cell.animals && cell.animals.length > 0;
+                        let displayTitle = '---';
+                        let isSheddingMode = false;
+                        let isNightFeedMode = false;
+                        let isAllFed48h = false;
+                        let sheddingDaysText = '';
+
+                        if(hasAnimals) {
+                            displayTitle = cell.animals[0].species.split(' (')[0];
+                            isSheddingMode = cell.animals.some(a => a.shed_status === 'Помутнение');
+                            isNightFeedMode = cell.animals.some(a => a.feed_logs && a.feed_logs.some(l => l.status === 'Оставлен на ночь'));
+
+                            isAllFed48h = cell.animals.every(a => {
+                                if(!a.feed_logs || a.feed_logs.length === 0) return false;
+                                let lastFeed = a.feed_logs[a.feed_logs.length - 1];
+                                const wasFed = (lastFeed.status === 'Съедено' || lastFeed.status === 'Частично') && lastFeed.eatenCount > 0;
+                                return (wasFed && (nowMs - Number(lastFeed.timestamp) < limitMs));
+                            });
+
+                            if (isSheddingMode) {
+                                const sheddingAnimal = cell.animals.find(a => a.shed_status === 'Помутнение');
+                                const days = getShedWarningDays(sheddingAnimal);
+                                if (days !== null) sheddingDaysText = `<div style="font-size:0.6rem; color:#29b6f6;">🔹 линька: день ${days}</div>`;
+                            }
+                        }
+
+                        let modeClass = hasAnimals ? 'occupied' : '';
+                        let previewStyle = '';
+
+                        if (isPreviewingThisLoc) {
+                            // Режим просмотра по дате: живые индикаторы (сыт/линяет сейчас) гасятся,
+                            // вместо них — цветная рамка по 4 сторонам за выбранную дату + пунктир "оставлено на ночь"
+                            sheddingDaysText = '';
+                            const cats = getDayCategoriesForCell(cell, calendarPreview.date);
+                            const sideColor = (cat) => cats[cat] ? CAL_COLORS[cat] : '#444';
+                            previewStyle = `border-width:3px; border-style:solid; border-top-color:${sideColor('fed')}; border-right-color:${sideColor('refused')}; border-bottom-color:${sideColor('shedding')}; border-left-color:${sideColor('partial')};`;
+                            if (cats.pending) previewStyle += ` outline:2px dashed ${CAL_COLORS.pending}; outline-offset:2px;`;
+                        } else {
+                            if (isAllFed48h) modeClass += ' fed-mode';
+                            if (isSheddingMode) modeClass += ' shedding-mode';
+                            if (isNightFeedMode) modeClass += ' night-feed-mode';
+                        }
+
+                        html += `
+                            <div class="cell ${modeClass}" style="--cw:${width}; ${previewStyle}" data-loc="${loc.id}" data-block="${block.id}" data-row="${rIdx}" data-cellidx="${cIdxInRow}" data-flat="${idx}">
+                                <div class="cell-num">${address}</div>
+                                <div class="cell-info">${displayTitle} ${hasAnimals && cell.animals.length > 1 ? '<span style="color:var(--blue)">+' + (cell.animals.length-1) + '</span>' : ''}</div>
+                                ${sheddingDaysText}
+                                ${labelHtml}
+                            </div>`;
+                        flatIdx++;
+                    });
+
+                    html += `<div class="add-cell-btn edit-ui" onclick="addCellToRow(${loc.id}, ${block.id}, ${rIdx})">+</div>`;
+                    html += `</div>`; // .shelf-row
+                });
+
+                html += `</div></div>`; // .rack-inner .rack
+                html += `<div class="add-row-btn edit-ui" onclick="addRow(${loc.id}, ${block.id})">+ Добавить ряд (полку)</div>`;
+                html += `</div>`; // .block-unit
+            });
+            app.innerHTML += html + `</div>`;
+        });
+        updateUIElements();
+        attachCellDragHandlers();
+    }
+
+    function deleteLoc(id) { if(confirm("Удалить локацию?")) { db = db.filter(l => l.id !== id); collapsedLocs.delete(id); saveCollapsedState(); save(); } }
+    function deleteBlock(lId, bId) { if(confirm("Удалить стеллаж?")) { const loc = db.find(l => l.id === lId); loc.blocks = loc.blocks.filter(b => b.id !== bId); save(); } }
+    function removeAnimal(idx) { if(confirm("Выселить особь?")) { const cell = getCell(state.locId, state.blockId, state.cellIdx); cell.animals.splice(idx, 1); save(); closeModals(); openCell(state.locId, state.blockId, state.cellIdx); } }
+    
+    function triggerImport() { document.getElementById('import-file').click(); }
+    function handleImport(input) {
+        const file = input.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (Array.isArray(importedData)) {
+                    // Прогоняем импортированные данные через ту же миграцию, что и при обычной загрузке страницы,
+                    // иначе бэкап в старом формате (block.cells + числовой rows) уронит render() и интерфейс "зависнет".
+                    importedData.forEach(loc => { (loc.blocks || []).forEach(migrateBlock); });
+                    db = importedData;
+                    localStorage.setItem(CURRENT_DB_KEY, JSON.stringify(db));
+                    render();
+                    alert("База успешно восстановлена!");
+                } 
+                else { alert("Неверный формат бэкапа."); }
+            } catch(err) { alert("Ошибка JSON."); }
+        };
+        reader.readAsText(file);
+    }
+
+    function wipeDatabase() {
+        if (!confirm("Вы уверены?")) return;
+        if (!confirm("Все данные будут удалены безвозвратно!")) return;
+        const input = prompt("Введите 'УДАЛИТЬ' для подтверждения");
+        if (input !== 'УДАЛИТЬ') { alert("Отменено: текст подтверждения не совпадает."); return; }
+        db = [];
+        localStorage.removeItem(CURRENT_DB_KEY);
+        save();
+        alert("База данных полностью очищена.");
+    }
+
+    function exportData() {
+        const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
+        const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"}));
+        a.download = `exofeed_backup_${timestamp}.json`; a.click();
+    }
+    // Часы в шапке — обновляются независимо от render(), т.к. #app полностью перестраивается при каждом save()
+    const CAL_MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+    // Именительный падеж — отдельно для заголовка календаря ("Июль 2026"), т.к. CAL_MONTHS (родительный) там читался бы как "Июля 2026"
+    const CAL_MONTHS_NOM = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    function tickClock() {
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        document.getElementById('clock-date').textContent = `📅 ${now.getDate()} ${CAL_MONTHS[now.getMonth()]}`;
+        document.getElementById('clock-time').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    }
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    render();
+</script>
+
+<script>
+    // PWA: регистрация service worker для установки на главный экран и офлайн-работы.
+    // Изолировано от основного скрипта и обёрнуто проверками — при открытии файла напрямую
+    // (file://, где service worker не поддерживается) просто ничего не делает, ошибок не бросает,
+    // и НИКАК не затрагивает localStorage/базу животных (это полностью независимые хранилища).
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        });
+    }
+</script>
+</body>
+</html>
