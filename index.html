@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.5.5</title>
+    <title>ExoFeed Control v1.5.6</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -222,7 +222,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.5.5-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.5.6-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -392,6 +392,21 @@
     </div>
 </div>
 
+<div id="modal-archive-reason" class="modal">
+    <div class="modal-content">
+        <h4>Причина выбытия</h4>
+        <p style="font-size:0.8rem; color:#aaa; margin-top:-8px;">Особь со всей историей кормлений/линек переедет в архив, ячейка освободится.</p>
+        <button class="btn-main" style="background:var(--red)" onclick="confirmArchiveAnimal('Падёж')">☠ Падёж</button>
+        <button class="btn-main" style="background:var(--gold)" onclick="confirmArchiveAnimal('Реализация')">💰 Реализация</button>
+        <button class="btn-sec" onclick="showArchiveOtherField()">Другое...</button>
+        <div id="archive-reason-other-wrap" style="display:none; margin-top:10px;">
+            <input type="text" id="archive-reason-other-text" placeholder="Укажите причину">
+            <button class="btn-main" style="background:var(--purple); margin-top:8px;" onclick="confirmArchiveAnimal('Другое')">Подтвердить</button>
+        </div>
+        <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
 <div id="modal-transfer" class="modal">
     <div class="modal-content">
         <h4>Переселение особи</h4>
@@ -455,10 +470,44 @@
     </div>
 </div>
 
+<div id="modal-search" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <h4>🔍 Поиск по всей базе</h4>
+        <input type="text" id="global-search-input" placeholder="Вид животного или подпись ячейки..." oninput="filterGlobalSearch()">
+        <div id="search-results" style="margin-top:12px; max-height:60vh; overflow-y:auto;"></div>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
+    </div>
+</div>
+
+<div id="modal-archive" class="modal">
+    <div class="modal-content" style="max-width: 550px;">
+        <h4>📁 Архив выбывших животных</h4>
+        <input type="text" id="archive-search-input" placeholder="Поиск по виду..." oninput="filterArchive()">
+        <div id="archive-list" style="margin-top:12px; max-height:60vh; overflow-y:auto;"></div>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
+    </div>
+</div>
+
+<div id="modal-restore" class="modal">
+    <div class="modal-content">
+        <h4>↩ Восстановить животное</h4>
+        <label>Локация</label>
+        <select id="restore-loc" onchange="renderRestoreBlocks()"></select>
+        <label>Стеллаж</label>
+        <select id="restore-block" onchange="renderRestoreCells()"></select>
+        <label>Ячейка</label>
+        <select id="restore-cell"></select>
+        <button class="btn-main" style="background:var(--green);" onclick="executeRestore()">Восстановить сюда</button>
+        <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
 <input type="file" id="import-file" style="display:none;" onchange="handleImport(this)">
 
 <div class="bottom-nav">
     <div onclick="showModalLocation(null)" class="nav-item edit-ui">+ Локация</div>
+    <div onclick="openGlobalSearch()" class="nav-item">🔍 Поиск</div>
+    <div onclick="openArchive()" class="nav-item">📁 Архив</div>
     <div onclick="triggerImport()" class="nav-item">📂 Импорт</div>
     <div onclick="exportData()" class="nav-item">💾 Бэкап</div>
     <div onclick="wipeDatabase()" class="nav-item edit-ui" style="color:var(--red);">🗑️ Очистить БД</div>
@@ -875,12 +924,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.5.5';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.5.6';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -948,6 +997,28 @@
     }
     db.forEach(loc => { (loc.blocks || []).forEach(migrateBlock); });
 
+    // --- АРХИВ ВЫБЫВШИХ ЖИВОТНЫХ (v1.5.6) ---
+    // Хранится ПОСТОЯННЫМ ключом, никогда не переименовывается между версиями (в отличие от CURRENT_DB_KEY) —
+    // поэтому не требует добавления в legacyKeys на каждой новой версии, переживёт любое будущее обновление автоматически.
+    const ARCHIVE_KEY = 'exofeed_archive';
+    let archiveDb = [];
+    try {
+        const storedArchive = JSON.parse(localStorage.getItem(ARCHIVE_KEY) || '[]');
+        if (Array.isArray(storedArchive)) archiveDb = storedArchive;
+    } catch (e) { archiveDb = []; }
+    archiveDb.forEach(rec => { if (rec && rec.animal) normalizeAnimal(rec.animal); });
+
+    function saveArchive() {
+        try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archiveDb)); } catch (e) {}
+    }
+
+    // --- Метка времени последнего изменения живой базы (v1.5.6) ---
+    // Используется при импорте, чтобы предупредить, если импортируемый файл СТАРШЕ текущих данных на устройстве.
+    const DB_MODIFIED_KEY = 'exofeed_db_modified_at';
+    function touchModified() {
+        try { localStorage.setItem(DB_MODIFIED_KEY, String(Date.now())); } catch (e) {}
+    }
+
     // --- ХЕЛПЕРЫ ДЛЯ ИЕРАРХИИ Block -> Rows -> Cells ---
     function getBlockCells(block) {
         let flat = [];
@@ -987,7 +1058,7 @@
     let state = { locId: null, blockId: null, cellIdx: null, animalIdx: null, selectedBulkIdxs: [] };
 
 
-    function save() { localStorage.setItem(CURRENT_DB_KEY, JSON.stringify(db)); render(); }
+    function save() { localStorage.setItem(CURRENT_DB_KEY, JSON.stringify(db)); touchModified(); render(); }
 
     // --- PIN на инженерный режим (v1.5.3) ---
     // ВАЖНО: это статичный HTML-файл без сервера, поэтому PIN — защита только от случайного нажатия
@@ -1324,7 +1395,7 @@
                         <button class="btn-main" style="padding:6px 10px; font-size:0.75rem; margin:0; background:#37474f;" onclick="openAnimalReport(${idx})">📊 ОТЧЁТ</button>
                         <button class="edit-ui btn-opt" style="padding:6px 10px; font-size:0.75rem" onclick="openAnimalForm(${idx})">ПРАВКА</button>
                         <button class="edit-ui btn-opt" style="padding:6px 10px; font-size:0.75rem; background:var(--purple);" onclick="openTransferModal(${idx})">🚚 ПЕРЕЕЗД</button>
-                        <button class="edit-ui btn-del" style="padding:6px 10px; font-size:0.75rem" onclick="removeAnimal(${idx})">ВЫСЕЛИТЬ</button>
+                        <button class="edit-ui btn-del" style="padding:6px 10px; font-size:0.75rem" onclick="openRemoveAnimalModal(${idx})">ВЫСЕЛИТЬ</button>
                     </div>
                     ${nightResolveHtml}
                     ${feedLogHtml}
@@ -2009,48 +2080,272 @@ ${bodyHtml}
 
     function deleteLoc(id) { if(confirm("Удалить локацию?")) { db = db.filter(l => l.id !== id); collapsedLocs.delete(id); saveCollapsedState(); save(); } }
     function deleteBlock(lId, bId) { if(confirm("Удалить стеллаж?")) { const loc = db.find(l => l.id === lId); loc.blocks = loc.blocks.filter(b => b.id !== bId); save(); } }
-    function removeAnimal(idx) { if(confirm("Выселить особь?")) { const cell = getCell(state.locId, state.blockId, state.cellIdx); cell.animals.splice(idx, 1); save(); closeModals(); openCell(state.locId, state.blockId, state.cellIdx); } }
-    
+    // --- Архивирование при выбытии животного (v1.5.6): вместо безвозвратного удаления ---
+    function openRemoveAnimalModal(idx) {
+        state.animalIdx = idx;
+        document.getElementById('archive-reason-other-text').value = '';
+        document.getElementById('archive-reason-other-wrap').style.display = 'none';
+        showModal('modal-archive-reason');
+    }
+    function showArchiveOtherField() {
+        document.getElementById('archive-reason-other-wrap').style.display = 'block';
+    }
+    function confirmArchiveAnimal(reason) {
+        let reasonText = '';
+        if (reason === 'Другое') {
+            reasonText = document.getElementById('archive-reason-other-text').value.trim();
+            if (!reasonText) { alert('Укажите причину в текстовом поле.'); return; }
+        }
+        const loc = db.find(l => l.id === state.locId);
+        const block = loc.blocks.find(b => b.id === state.blockId);
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const animal = cell.animals[state.animalIdx];
+        const pos = locateCellPosition(block, state.cellIdx);
+        const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+
+        archiveDb.push({
+            id: Date.now() + Math.random(),
+            animal: JSON.parse(JSON.stringify(animal)), // отсоединяем от живой базы полной копией
+            reason: reason,
+            reasonText: reasonText,
+            archivedAt: Date.now(),
+            originLocName: loc.name,
+            originBlockName: block.name,
+            originAddress: address
+        });
+        saveArchive();
+
+        cell.animals.splice(state.animalIdx, 1);
+        save();
+        closeModals();
+        openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    // --- Глобальный поиск по всей базе (v1.5.6): виду и подписи ячейки, включая архив ---
+    function openGlobalSearch() {
+        document.getElementById('global-search-input').value = '';
+        renderGlobalSearchResults('');
+        showModal('modal-search');
+    }
+    function filterGlobalSearch() {
+        renderGlobalSearchResults(document.getElementById('global-search-input').value);
+    }
+    function renderGlobalSearchResults(query) {
+        const q = (query || '').toLowerCase().trim();
+        let html = '';
+        if (q.length > 0) {
+            db.forEach(loc => {
+                loc.blocks.forEach(block => {
+                    getBlockCells(block).forEach((cell, cIdx) => {
+                        if (cell.isService) return;
+                        const labelMatch = cell.label && cell.label.toLowerCase().includes(q);
+                        (cell.animals || []).forEach(a => {
+                            if (labelMatch || a.species.toLowerCase().includes(q)) {
+                                const pos = locateCellPosition(block, cIdx);
+                                const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+                                html += `
+                                    <div class="sheet-row" onclick="closeModals(); openLocationAndCell(${loc.id}, ${block.id}, ${cIdx});">
+                                        <b>${a.species}</b> <span style="color:var(--gold)">${a.gender}</span>
+                                        <div style="font-size:0.78rem; color:#aaa;">${loc.name} → ${block.name} → ${address}${cell.label ? ' («' + cell.label + '»)' : ''}</div>
+                                    </div>`;
+                            }
+                        });
+                    });
+                });
+            });
+            archiveDb.forEach(rec => {
+                if (rec.animal.species.toLowerCase().includes(q)) {
+                    html += `
+                        <div class="sheet-row" onclick="closeModals(); openArchive(); document.getElementById('archive-search-input').value = ${JSON.stringify(rec.animal.species)}; filterArchive();">
+                            <b>${rec.animal.species}</b> <span style="color:var(--gold)">${rec.animal.gender}</span>
+                            <span class="animal-badge" style="background:var(--red); color:#fff;">ВЫБЫЛО (архив)</span>
+                        </div>`;
+                }
+            });
+        }
+        if (!html) html = `<p style="color:#888;">${q ? 'Ничего не найдено.' : 'Введите вид животного или подпись ячейки.'}</p>`;
+        document.getElementById('search-results').innerHTML = html;
+    }
+    // Открыть карточку ячейки из результатов поиска — разворачивает локацию, если та свёрнута
+    function openLocationAndCell(locId, blockId, cellIdx) {
+        collapsedLocs.delete(locId);
+        saveCollapsedState();
+        render();
+        openCell(locId, blockId, cellIdx);
+    }
+
+    // --- Архив выбывших животных (v1.5.6): просмотр/поиск доступны всем, восстановление и удаление — под PIN ---
+    function openArchive() {
+        document.getElementById('archive-search-input').value = '';
+        renderArchiveList('');
+        showModal('modal-archive');
+    }
+    function filterArchive() {
+        renderArchiveList(document.getElementById('archive-search-input').value);
+    }
+    function renderArchiveList(filterText) {
+        const filter = (filterText || '').toLowerCase().trim();
+        const items = archiveDb.map((rec, i) => ({ rec, i }))
+            .filter(({ rec }) => !filter || rec.animal.species.toLowerCase().includes(filter))
+            .reverse();
+        let html = '';
+        items.forEach(({ rec, i }) => {
+            html += `
+                <div class="animal-item">
+                    <div style="font-weight:bold; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                        <span>${rec.animal.species} <span style="color:var(--gold)">${rec.animal.gender}</span></span>
+                        <span class="animal-badge" style="background:var(--red); color:#fff;">ВЫБЫЛО</span>
+                    </div>
+                    <div style="font-size:0.78rem; color:#aaa;">Причина: ${rec.reason}${rec.reasonText ? ' — ' + rec.reasonText : ''}</div>
+                    <div style="font-size:0.78rem; color:#aaa;">Дата выбытия: ${formatLogDateTime(rec.archivedAt)}</div>
+                    <div style="font-size:0.78rem; color:#aaa; margin-bottom:8px;">Жил в: ${rec.originLocName}, ${rec.originBlockName}, место ${rec.originAddress}</div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn-main" style="padding:6px 10px; font-size:0.75rem; margin:0; background:#37474f;" onclick="openArchivedAnimalReport(${i})">📊 Отчёт</button>
+                        <button class="btn-main edit-ui" style="padding:6px 10px; font-size:0.75rem; margin:0; background:var(--green);" onclick="openRestoreModal(${i})">↩ Восстановить</button>
+                        <button class="btn-del edit-ui" style="padding:6px 10px; font-size:0.75rem; margin:0;" onclick="permanentlyDeleteArchived(${i})">🗑 Удалить навсегда</button>
+                    </div>
+                </div>`;
+        });
+        if (!html) html = `<p style="color:#888;">${filter ? 'По этому запросу в архиве ничего не найдено.' : 'Архив пуст.'}</p>`;
+        document.getElementById('archive-list').innerHTML = html;
+    }
+    function openArchivedAnimalReport(archiveIdx) {
+        const rec = archiveDb[archiveIdx];
+        const bodyHtml = `<p style="color:#e57373;"><b>ВЫБЫЛО</b> — ${rec.reason}${rec.reasonText ? ': ' + rec.reasonText : ''} (${formatLogDateTime(rec.archivedAt)})</p>` +
+            buildAnimalHistoryHtml(rec.animal, rec.originAddress, rec.originBlockName);
+        showReportModal(`Архив: ${rec.animal.species}`, bodyHtml, `archive_report_${rec.animal.species.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.html`);
+    }
+    function permanentlyDeleteArchived(archiveIdx) {
+        if (!confirm('Удалить эту архивную запись НАВСЕГДА? Восстановить будет невозможно.')) return;
+        archiveDb.splice(archiveIdx, 1);
+        saveArchive();
+        renderArchiveList(document.getElementById('archive-search-input').value);
+    }
+
+    // --- Восстановление из архива (v1.5.6) — переиспользует принцип выбора места из "🚚 ПЕРЕЕЗД" ---
+    let restoreArchiveIdx = null;
+    function openRestoreModal(archiveIdx) {
+        restoreArchiveIdx = archiveIdx;
+        const locSelect = document.getElementById('restore-loc'); locSelect.innerHTML = '';
+        db.forEach(l => locSelect.innerHTML += `<option value="${l.id}">${l.name}</option>`);
+        renderRestoreBlocks();
+        showModal('modal-restore');
+    }
+    function renderRestoreBlocks() {
+        const locId = parseInt(document.getElementById('restore-loc').value);
+        const blockSelect = document.getElementById('restore-block'); blockSelect.innerHTML = '';
+        const loc = db.find(l => l.id === locId);
+        if (loc) loc.blocks.forEach(b => blockSelect.innerHTML += `<option value="${b.id}">${b.name}</option>`);
+        renderRestoreCells();
+    }
+    function renderRestoreCells() {
+        const locId = parseInt(document.getElementById('restore-loc').value);
+        const blockId = parseInt(document.getElementById('restore-block').value);
+        const cellSelect = document.getElementById('restore-cell'); cellSelect.innerHTML = '';
+        const block = db.find(l => l.id === locId)?.blocks.find(b => b.id === blockId);
+        if (block) getBlockCells(block).forEach((c, idx) => {
+            if (c.isService) return;
+            const pos = locateCellPosition(block, idx);
+            const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+            const occupiedTag = (c.animals && c.animals.length > 0) ? ' (занято)' : '';
+            cellSelect.innerHTML += `<option value="${idx}">${address}${c.label ? ' — ' + c.label : ''}${occupiedTag}</option>`;
+        });
+    }
+    function executeRestore() {
+        const locId = parseInt(document.getElementById('restore-loc').value);
+        const blockId = parseInt(document.getElementById('restore-block').value);
+        const cellIdx = parseInt(document.getElementById('restore-cell').value);
+        const cell = getCell(locId, blockId, cellIdx);
+        if (!cell) { alert('Выберите корректную ячейку.'); return; }
+        const rec = archiveDb[restoreArchiveIdx];
+        cell.animals.push(rec.animal);
+        archiveDb.splice(restoreArchiveIdx, 1);
+        saveArchive();
+        save();
+        closeModals();
+        alert('Животное восстановлено.');
+    }
+
     function triggerImport() { document.getElementById('import-file').click(); }
+    // Единый формат бэкапа (v1.5.6): обёртка с меткой времени + живая база + архив.
+    // Старый формат (просто массив локаций, без архива) по-прежнему читается при импорте — определяется автоматически.
+    function downloadBackupFile(dbData, archiveData, prefix) {
+        const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
+        const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+        const backup = { __exofeedBackup: true, version: 'v1.5.6', savedAt: Date.now(), db: dbData, archive: archiveData };
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
+        a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
+    }
+
     function handleImport(input) {
         const file = input.files[0]; if (!file) return;
         const reader = new FileReader();
         reader.onload = function(e) {
-            try {
-                const importedData = JSON.parse(e.target.result);
-                if (Array.isArray(importedData)) {
-                    // Прогоняем импортированные данные через ту же миграцию, что и при обычной загрузке страницы,
-                    // иначе бэкап в старом формате (block.cells + числовой rows) уронит render() и интерфейс "зависнет".
-                    importedData.forEach(loc => { (loc.blocks || []).forEach(migrateBlock); });
-                    db = importedData;
-                    localStorage.setItem(CURRENT_DB_KEY, JSON.stringify(db));
-                    render();
-                    alert("База успешно восстановлена!");
-                } 
-                else { alert("Неверный формат бэкапа."); }
-            } catch(err) { alert("Ошибка JSON."); }
+            let parsed;
+            try { parsed = JSON.parse(e.target.result); } catch (err) { alert("Ошибка JSON."); return; }
+
+            let importedDb, importedArchive, importedSavedAt;
+            if (parsed && parsed.__exofeedBackup === true && Array.isArray(parsed.db)) {
+                importedDb = parsed.db;
+                importedArchive = Array.isArray(parsed.archive) ? parsed.archive : [];
+                importedSavedAt = parsed.savedAt || null;
+            } else if (Array.isArray(parsed)) {
+                // Старый формат бэкапа (просто массив локаций, без архива и метки времени)
+                importedDb = parsed;
+                importedArchive = [];
+                importedSavedAt = null;
+            } else {
+                alert("Неверный формат бэкапа.");
+                return;
+            }
+
+            if (!confirm("Импорт заменит текущую базу целиком (включая архив). Продолжить?")) return;
+
+            // Предупреждаем, если импортируемый файл СТАРШЕ, чем последнее изменение текущей базы на этом устройстве
+            const currentModifiedRaw = localStorage.getItem(DB_MODIFIED_KEY);
+            const currentModified = currentModifiedRaw ? Number(currentModifiedRaw) : null;
+            if (currentModified && importedSavedAt && importedSavedAt < currentModified) {
+                const proceed = confirm(
+                    `ВНИМАНИЕ: текущая база на этом устройстве обновлялась позже (${formatLogDateTime(currentModified)}), ` +
+                    `чем импортируемый файл (${formatLogDateTime(importedSavedAt)}).\n\n` +
+                    `Импорт этого файла заменит более новые данные более старыми.\n\nВсё равно продолжить?`
+                );
+                if (!proceed) return;
+            }
+
+            // Автоматический safety-бэкап текущего состояния перед заменой — на случай, если импорт окажется ошибкой
+            downloadBackupFile(db, archiveDb, 'safety_before_import');
+
+            importedDb.forEach(loc => { (loc.blocks || []).forEach(migrateBlock); });
+            importedArchive.forEach(rec => { if (rec && rec.animal) normalizeAnimal(rec.animal); });
+
+            db = importedDb;
+            archiveDb = importedArchive;
+            localStorage.setItem(CURRENT_DB_KEY, JSON.stringify(db));
+            saveArchive();
+            touchModified();
+            render();
+            alert("База успешно восстановлена (архив тоже перенесён). Резервная копия прежнего состояния скачана автоматически.");
         };
         reader.readAsText(file);
     }
 
     function wipeDatabase() {
         if (!confirm("Вы уверены?")) return;
-        if (!confirm("Все данные будут удалены безвозвратно!")) return;
+        if (!confirm("Все данные будут удалены безвозвратно, включая архив выбывших животных!")) return;
         const input = prompt("Введите 'УДАЛИТЬ' для подтверждения");
         if (input !== 'УДАЛИТЬ') { alert("Отменено: текст подтверждения не совпадает."); return; }
         db = [];
+        archiveDb = [];
         localStorage.removeItem(CURRENT_DB_KEY);
+        saveArchive();
         save();
         alert("База данных полностью очищена.");
     }
 
-    function exportData() {
-        const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
-        const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([JSON.stringify(db)], {type: "application/json"}));
-        a.download = `exofeed_backup_${timestamp}.json`; a.click();
-    }
+    function exportData() { downloadBackupFile(db, archiveDb, 'backup'); }
+
     // Часы в шапке — обновляются независимо от render(), т.к. #app полностью перестраивается при каждом save()
     const CAL_MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
     // Именительный падеж — отдельно для заголовка календаря ("Июль 2026"), т.к. CAL_MONTHS (родительный) там читался бы как "Июля 2026"
