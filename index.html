@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.5.7</title>
+    <title>ExoFeed Control v1.5.8</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -50,7 +50,7 @@
 
         .location { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 25px; border: 1px solid var(--border); }
         .location-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; }
-        .loc-collapse-arrow { font-size: 0.9rem; color: #888; flex-shrink: 0; width: 14px; text-align: center; }
+        .loc-collapse-arrow { font-size: 1.4rem; color: #aaa; flex-shrink: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; text-align: center; }
         .loc-summary-collapsed { font-size: 0.78rem; color: #999; cursor: pointer; padding: 2px 0 2px 22px; }
         .loc-actions { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
         
@@ -134,6 +134,30 @@
         .num-helper { background: #333; border: 1px solid #555; color: #fff; padding: 6px 12px; border-radius: 6px; display: inline-block; margin-bottom: 10px; font-size: 0.85rem; cursor: pointer; }
 
         .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: #1a1a1a; display: flex; justify-content: space-around; padding: 12px 0; border-top: 1px solid var(--border); z-index: 900; }
+        #lock-status-bottom { font-weight: bold; }
+
+        /* Массовое кормление (v1.5.8) */
+        .mass-feed-bar {
+            display: none; position: fixed; left: 0; width: 100%; bottom: 58px; z-index: 950;
+            background: #2a2410; border-top: 1px solid var(--purple); padding: 10px 16px;
+            justify-content: space-between; align-items: center; box-sizing: border-box;
+        }
+        .mass-feed-bar.active { display: flex; }
+        .cell.mass-selectable { opacity: 0.85; }
+        .cell.mass-selected { border-color: var(--purple) !important; background: #3a2a4a !important; }
+        .mass-select-check {
+            position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%;
+            background: var(--purple); color: #fff; font-size: 0.7rem; display: flex; align-items: center; justify-content: center;
+            border: 1px solid #fff;
+        }
+
+        /* Закреплённый крестик закрытия модалок (v1.5.8) — не уезжает при скролле содержимого модалки */
+        .modal-close-x {
+            position: fixed; top: 12px; right: 12px; z-index: 1001;
+            width: 36px; height: 36px; border-radius: 50%; background: #333; color: #fff;
+            display: flex; align-items: center; justify-content: center; font-size: 1.1rem; cursor: pointer;
+            border: 1px solid #555;
+        }
         .nav-item { font-weight: bold; color: #aaa; cursor: pointer; font-size: 0.85rem; padding: 5px 10px; }
         
         .animal-item { background: #333; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid var(--blue); position: relative; }
@@ -222,7 +246,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.5.7-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.5.8-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -285,6 +309,14 @@
         <button class="btn-del edit-ui" style="width:100%; padding:10px; margin-bottom:10px;" onclick="deleteCurrentCell()">🗑 Удалить эту ячейку</button>
         <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
 
+        <div style="background:#252525; padding:10px; border-radius:8px; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:bold;">🌡 Температура: <span id="cell-temp-current" style="color:var(--gold);">—</span></span>
+                <button class="btn-sec" style="width:auto; margin:0; padding:6px 10px; font-size:0.75rem;" onclick="openAddTempModal()">+ Показание</button>
+            </div>
+            <div id="cell-temp-history" style="margin-top:8px;"></div>
+        </div>
+
         <div id="animals-list"></div>
         
         <div id="cell-animal-actions" style="display:flex; gap:6px; margin-top:10px;">
@@ -338,10 +370,6 @@
             </div>
             <p style="font-size:0.7rem; color:#888; margin:6px 0 0;">При указании года стадия возраста подставится автоматически (до 2 лет — Juv., 2-4 года — Sub., 4+ — Ad.) — можно переключить вручную.</p>
         </div>
-        <div class="form-group">
-            <label>Заметки (необязательно)</label>
-            <textarea id="a-notes" rows="2" placeholder="Напр: заселён вместе с выводком, происхождение..."></textarea>
-        </div>
         <button class="btn-main" onclick="saveAnimal()">Сохранить изменения</button>
         <button class="btn-sec" onclick="document.getElementById('modal-animal-form').style.display='none'">Отмена</button>
     </div>
@@ -358,7 +386,7 @@
 
 <div id="modal-feed" class="modal">
     <div class="modal-content">
-        <h4>Параметры корма</h4>
+        <h4 id="feed-form-title">Параметры корма</h4>
         <div class="form-group">
             <label>Тип кормового объекта</label>
             <select id="feed-type" onchange="renderFeedSizes()">
@@ -376,17 +404,51 @@
             <input type="number" id="feed-count" value="1" min="1">
         </div>
         <div style="background:#252525; padding:12px; border-radius:8px; margin-bottom:12px;">
-            <label style="color:#fff; font-weight:bold;">Режим раздачи</label>
-            <div class="checkbox-row" style="background:transparent; padding:5px 0; margin:0;">
-                <input type="checkbox" id="feed-night-mode"> <label for="feed-night-mode" style="margin:0; color:var(--gold);">Оставить на ночь (контроль утром)</label>
+            <label style="color:#fff; font-weight:bold;">Способ подачи</label>
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-top:6px;">
+                <button type="button" class="btn-opt feed-method-opt active" data-val="normal" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem;">Обычно</button>
+                <button type="button" class="btn-opt feed-method-opt" data-val="night" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem; color:var(--gold);">На ночь</button>
+                <button type="button" class="btn-opt feed-method-opt" data-val="forced" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem;">Принудительно</button>
             </div>
         </div>
         <div class="form-group">
             <label>Комментарий (необязательно)</label>
             <textarea id="feed-comment" rows="2" placeholder="Напр: ел неохотно, вялый..."></textarea>
         </div>
-        <button class="btn-main" onclick="saveFeeding()">Записать кормление</button>
-        <button class="btn-sec" onclick="document.getElementById('modal-feed').style.display='none'">Отмена</button>
+        <button class="btn-main" onclick="submitFeedForm()">Записать кормление</button>
+        <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-edit-feedlog" class="modal">
+    <div class="modal-content">
+        <h4>✏ Редактировать запись кормления</h4>
+        <div class="form-group">
+            <label>Тип кормового объекта</label>
+            <select id="editlog-type" onchange="renderEditLogSizes()">
+                <option value="RATS">Крыса</option>
+                <option value="MICE">Мышь</option>
+                <option value="RABBITS">Кролик</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Размер КО</label>
+            <select id="editlog-size"></select>
+        </div>
+        <div class="form-group">
+            <label>Предложено, шт</label>
+            <input type="number" id="editlog-count" min="1">
+        </div>
+        <div class="form-group">
+            <label>Съедено, шт (оставьте пустым, если ещё не разрешено — "оставлен на ночь")</label>
+            <input type="number" id="editlog-eaten" min="0">
+        </div>
+        <div class="form-group">
+            <label>Комментарий</label>
+            <textarea id="editlog-comment" rows="2"></textarea>
+        </div>
+        <button class="btn-main" style="background:var(--green);" onclick="saveEditedFeedLog()">Сохранить изменения</button>
+        <button class="btn-sec" onclick="closeModals()">Отмена</button>
     </div>
 </div>
 
@@ -412,6 +474,26 @@
             <input type="text" id="archive-reason-other-text" placeholder="Укажите причину">
             <button class="btn-main" style="background:var(--purple); margin-top:8px;" onclick="confirmArchiveAnimal('Другое')">Подтвердить</button>
         </div>
+        <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-add-note" class="modal">
+    <div class="modal-content">
+        <h4>📝 Новая заметка</h4>
+        <p style="font-size:0.8rem; color:#aaa; margin-top:-8px;">Наблюдение, состояние, событие — с датой и временем, история заметок сохраняется.</p>
+        <textarea id="new-note-text" rows="3" placeholder="Напр: вялый, отказ от корма второй раз подряд..."></textarea>
+        <button class="btn-main" style="background:var(--green);" onclick="saveNewNote()">Сохранить заметку</button>
+        <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-add-temp" class="modal">
+    <div class="modal-content">
+        <h4>🌡 Новое показание температуры</h4>
+        <p style="font-size:0.8rem; color:#aaa; margin-top:-8px;">Фоновая температура в террариуме/контейнере, °C (можно отрицательную).</p>
+        <input type="number" id="new-temp-value" step="0.5" placeholder="Напр: 26">
+        <button class="btn-main" style="background:var(--green);" onclick="saveNewTemp()">Сохранить показание</button>
         <button class="btn-sec" onclick="closeModals()">Отмена</button>
     </div>
 </div>
@@ -528,8 +610,17 @@
 
 <input type="file" id="import-file" style="display:none;" onchange="handleImport(this)">
 
+<div id="mass-feed-bar" class="mass-feed-bar">
+    <span id="mass-feed-count">Выбрано: 0</span>
+    <div style="display:flex; gap:8px;">
+        <button class="btn-sec" style="width:auto; margin:0; padding:8px 14px; font-size:0.85rem;" onclick="cancelMassFeed()">Отмена</button>
+        <button class="btn-main" style="width:auto; margin:0; padding:8px 14px; font-size:0.85rem; background:var(--purple);" onclick="openMassFeedForm()">🍖 Кормить</button>
+    </div>
+</div>
+
 <div class="bottom-nav">
     <div onclick="showModalLocation(null)" class="nav-item edit-ui">+ Локация</div>
+    <div onclick="toggleLock()" class="nav-item" id="lock-status-bottom">🔒 РАБОТА</div>
     <div onclick="openGlobalSearch()" class="nav-item">🔍 Поиск</div>
     <div onclick="openArchive()" class="nav-item">📁 Архив</div>
     <div onclick="triggerImport()" class="nav-item">📂 Импорт</div>
@@ -555,6 +646,8 @@
     const FEED_TYPE_LABELS = { 'RATS': 'Крыса', 'MICE': 'Мышь', 'RABBITS': 'Кролик' };
     const FED_INDICATOR_HOURS = 72; // сколько часов держится зелёная отметка "сыт" после кормления (v1.5.1: было 48)
     const FED_INDICATOR_MS = FED_INDICATOR_HOURS * 60 * 60 * 1000;
+    const REGURGITATION_WINDOW_HOURS = 144; // v1.5.8: окно, в течение которого можно отметить срыгивание — 6 суток
+    const REGURGITATION_WINDOW_MS = REGURGITATION_WINDOW_HOURS * 60 * 60 * 1000;
 
     // --- Палитра календаря кормлений/линек (v1.5.2) ---
     // Ячейка стеллажа в режиме просмотра: 4 стороны рамки + пунктирный контур "оставлено на ночь".
@@ -586,6 +679,70 @@
         const d = new Date(ts);
         const pad = (n) => String(n).padStart(2, '0');
         return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // Форматирование температуры (v1.5.8): обязательный знак и символ градуса, как просили — "+26°C" / "-2°C"
+    function formatTemp(value) {
+        const n = Number(value);
+        if (isNaN(n)) return '—';
+        return `${n > 0 ? '+' : (n === 0 ? '+' : '')}${n}°C`;
+    }
+
+    // v1.5.8: раньше "последней" записью кормления считался последний ЭЛЕМЕНТ МАССИВА — это ломалось,
+    // если записи оказывались не в хронологическом порядке (например, после импорта бэкапа с другого устройства).
+    // Теперь ищем запись по буквально самой поздней метке времени — порядок в массиве больше не имеет значения.
+    function getLatestFeedLog(animal) {
+        if (!animal.feed_logs || animal.feed_logs.length === 0) return null;
+        return animal.feed_logs.reduce((latest, log) =>
+            (!latest || Number(log.timestamp) > Number(latest.timestamp)) ? log : latest, null);
+    }
+
+    // --- Журнал заметок о состоянии животного (v1.5.8) ---
+    function openAddNoteModal(idx) {
+        state.animalIdx = idx;
+        document.getElementById('new-note-text').value = '';
+        showModal('modal-add-note');
+    }
+    function saveNewNote() {
+        const text = document.getElementById('new-note-text').value.trim();
+        if (!text) { alert('Введите текст заметки.'); return; }
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const animal = cell.animals[state.animalIdx];
+        if (!animal.notesLog) animal.notesLog = [];
+        animal.notesLog.push({ timestamp: Date.now(), text });
+        save();
+        closeModals();
+        openCell(state.locId, state.blockId, state.cellIdx);
+    }
+    function deleteAnimalNote(animalIdx, noteIdx) {
+        if (!confirm('Удалить эту заметку?')) return;
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        cell.animals[animalIdx].notesLog.splice(noteIdx, 1);
+        save();
+        openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    // --- Журнал температурных показаний ячейки (v1.5.8) ---
+    function openAddTempModal() {
+        document.getElementById('new-temp-value').value = '';
+        showModal('modal-add-temp');
+    }
+    function saveNewTemp() {
+        const raw = document.getElementById('new-temp-value').value;
+        if (raw === '' || isNaN(Number(raw))) { alert('Введите числовое значение температуры.'); return; }
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        if (!cell.tempLog) cell.tempLog = [];
+        cell.tempLog.push({ timestamp: Date.now(), value: Number(raw) });
+        save();
+        closeModals();
+        openCell(state.locId, state.blockId, state.cellIdx);
+    }
+    function deleteTempLog(logIdx) {
+        if (!confirm('Удалить это показание?')) return;
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        cell.tempLog.splice(logIdx, 1);
+        save();
+        openCell(state.locId, state.blockId, state.cellIdx);
     }
 
     // Категории событий одной ячейки на конкретную дату (для рамки в режиме просмотра и для сетки календаря)
@@ -721,6 +878,68 @@
         return `${blockCount} ${blockWord} &middot; ${occupied} занято из ${total}`;
     }
     let calendarPreview = null; // { locId, date } — активный режим просмотра стеллажа по дате
+
+    // --- Массовое кормление (v1.5.8): доступно в обычном режиме "Работа", в пределах ОДНОГО стеллажа ---
+    let massFeedState = null; // { locId, blockId, selectedCells: Set<flatIdx> }
+    function startMassFeed(locId, blockId) {
+        massFeedState = { locId, blockId, selectedCells: new Set() };
+        render();
+    }
+    function cancelMassFeed() {
+        massFeedState = null;
+        render();
+    }
+    function toggleCellMassSelect(locId, blockId, flatIdx) {
+        if (!massFeedState || massFeedState.locId !== locId || massFeedState.blockId !== blockId) return;
+        if (massFeedState.selectedCells.has(flatIdx)) massFeedState.selectedCells.delete(flatIdx);
+        else massFeedState.selectedCells.add(flatIdx);
+        render();
+    }
+    function openMassFeedForm() {
+        if (!massFeedState || massFeedState.selectedCells.size === 0) { alert('Выберите хотя бы одну ячейку.'); return; }
+        document.getElementById('feed-form-title').textContent = `Массовое кормление: ${massFeedState.selectedCells.size} ячеек`;
+        document.getElementById('feed-type').value = 'RATS'; renderFeedSizes();
+        document.querySelectorAll('.feed-method-opt').forEach(b => b.classList.remove('active'));
+        document.querySelector('.feed-method-opt[data-val="normal"]').classList.add('active');
+        document.getElementById('feed-comment').value = '';
+        state.feedContext = 'mass';
+        showModal('modal-feed');
+    }
+    function saveMassFeeding() {
+        const params = readFeedFormValues();
+        const block = db.find(l => l.id === massFeedState.locId).blocks.find(b => b.id === massFeedState.blockId);
+        const blockCells = getBlockCells(block);
+        let animals = [];
+        massFeedState.selectedCells.forEach(flatIdx => {
+            const cell = blockCells[flatIdx];
+            if (cell && !cell.isService) animals.push(...cell.animals);
+        });
+        const cellCount = massFeedState.selectedCells.size;
+        applyFeedingRecord(animals, params);
+        save();
+        closeModals();
+        massFeedState = null;
+        render();
+        alert(`Кормление записано для ${cellCount} ячеек (${animals.length} животных).`);
+    }
+
+    // --- Перестановка локаций и стеллажей местами (v1.5.8) — простые ▲/▼ вместо drag-and-drop,
+    // чтобы не столкнуться с тем же конфликтом жестов скролла, что и у ячеек ---
+    function moveLocation(locId, direction) {
+        const idx = db.findIndex(l => l.id === locId);
+        const newIdx = idx + direction;
+        if (newIdx < 0 || newIdx >= db.length) return;
+        [db[idx], db[newIdx]] = [db[newIdx], db[idx]];
+        save();
+    }
+    function moveBlock(locId, blockId, direction) {
+        const loc = db.find(l => l.id === locId);
+        const idx = loc.blocks.findIndex(b => b.id === blockId);
+        const newIdx = idx + direction;
+        if (newIdx < 0 || newIdx >= loc.blocks.length) return;
+        [loc.blocks[idx], loc.blocks[newIdx]] = [loc.blocks[newIdx], loc.blocks[idx]];
+        save();
+    }
 
     function openLocationCalendar(locId) {
         const now = new Date();
@@ -948,12 +1167,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.5.7';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.5.8';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -975,6 +1194,7 @@
             if (log.refusalReason === undefined) log.refusalReason = '';
             if (log.timestamp === undefined) log.timestamp = Date.now();
             if (log.comment === undefined) log.comment = ''; // v1.5.7: свободный комментарий к записи кормления
+            if (log.forced === undefined) log.forced = false; // v1.5.8: принудительное кормление
         });
         if (!animal.shed_logs) animal.shed_logs = [];
         animal.shed_logs.forEach(log => {
@@ -984,7 +1204,13 @@
                 log.timestamp = isNaN(parsed) ? Date.now() : parsed;
             }
         });
-        if (animal.notes === undefined) animal.notes = ''; // v1.5.7: заметки при заселении, редактируются далее
+        // v1.5.8: "Заметки" были одним перезаписываемым полем — теперь это журнал дозаписей (дата+время+текст),
+        // как история кормлений/линек. Старое значение (если было) переносится первой записью, не теряется.
+        if (!Array.isArray(animal.notesLog)) {
+            animal.notesLog = [];
+            if (animal.notes) animal.notesLog.push({ timestamp: Date.now(), text: animal.notes });
+        }
+        delete animal.notes;
         // Текущий статус линьки всегда должен соответствовать последней записи истории (после миграции/правок)
         if (animal.shed_logs.length > 0) {
             animal.shed_status = animal.shed_logs[animal.shed_logs.length - 1].status;
@@ -1001,6 +1227,7 @@
         if (cell.isService === undefined) cell.isService = false;
         if (cell.width === undefined || !cell.width) cell.width = 1;
         if (!cell.animals) cell.animals = [];
+        if (!Array.isArray(cell.tempLog)) cell.tempLog = []; // v1.5.8: журнал температурных показаний (дата+время+значение)
         cell.animals.forEach(normalizeAnimal);
         return cell;
     }
@@ -1152,6 +1379,8 @@
     function applyLockUI() {
         document.getElementById('lock-status').innerHTML = isLocked ? '🔒 РАБОТА' : '🔓 ИНЖЕНЕР';
         document.getElementById('lock-status').className = `lock-btn ${isLocked ? 'locked' : 'unlocked'}`;
+        // v1.5.8: дублирующая кнопка внизу экрана — чтобы не приходилось скроллить наверх для выхода из инженерного режима
+        document.getElementById('lock-status-bottom').innerHTML = isLocked ? '🔒 РАБОТА' : '🔓 ИНЖЕНЕР';
         document.body.classList.toggle('engineer-mode', !isLocked);
     }
 
@@ -1257,54 +1486,63 @@
 
     function attachCellDragHandlers() {
         document.querySelectorAll('.cell[data-flat]').forEach(cellEl => {
-            let startX = 0, startY = 0, moved = false, dragging = false;
+            let startX = 0, startY = 0, dragging = false, justDragged = false;
             const locId = parseInt(cellEl.dataset.loc);
             const blockId = parseInt(cellEl.dataset.block);
             const rowIdx = parseInt(cellEl.dataset.row);
             const cellIdxInRow = parseInt(cellEl.dataset.cellidx);
             const flatIdx = parseInt(cellEl.dataset.flat);
 
+            // Перетаскивание — только в инженерном режиме, вне просмотра по дате и вне массового кормления.
+            // Нужен ручной жест (а не click), т.к. здесь важно отследить, НАД какой ячейкой отпустили палец.
             cellEl.addEventListener('pointerdown', (e) => {
-                startX = e.clientX; startY = e.clientY; moved = false; dragging = false;
+                if (isLocked || (calendarPreview && calendarPreview.locId === locId) || (massFeedState && massFeedState.blockId === blockId)) return;
+                startX = e.clientX; startY = e.clientY; dragging = false;
                 try { cellEl.setPointerCapture(e.pointerId); } catch (err) {}
             });
             cellEl.addEventListener('pointermove', (e) => {
+                if (isLocked) return;
                 const dx = e.clientX - startX, dy = e.clientY - startY;
                 if (Math.hypot(dx, dy) > 8) {
-                    moved = true;
-                    // Перетаскивание отключается во время просмотра стеллажа по дате (не имеет смысла на историческом срезе)
-                    const dragAllowed = !isLocked && !(calendarPreview && calendarPreview.locId === locId);
-                    if (dragAllowed) {
-                        if (!dragging) { dragging = true; cellEl.classList.add('dragging'); }
-                        document.querySelectorAll('.cell.drag-over').forEach(el => el.classList.remove('drag-over'));
-                        const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cell');
-                        if (target && target !== cellEl) target.classList.add('drag-over');
-                    }
+                    if (!dragging) { dragging = true; cellEl.classList.add('dragging'); }
+                    document.querySelectorAll('.cell.drag-over').forEach(el => el.classList.remove('drag-over'));
+                    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cell');
+                    if (target && target !== cellEl) target.classList.add('drag-over');
                 }
             });
             cellEl.addEventListener('pointerup', (e) => {
+                if (!dragging) return;
                 cellEl.classList.remove('dragging');
                 document.querySelectorAll('.cell.drag-over').forEach(el => el.classList.remove('drag-over'));
-                if (dragging) {
-                    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cell');
-                    if (target && target !== cellEl && target.dataset.row !== undefined) {
-                        const tRow = parseInt(target.dataset.row);
-                        const tCellIdx = parseInt(target.dataset.cellidx);
-                        swapCells(locId, blockId, rowIdx, cellIdxInRow, tRow, tCellIdx);
-                    }
-                } else if (!moved) {
-                    if (calendarPreview && calendarPreview.locId === locId) {
-                        openCellDaySummary(locId, blockId, flatIdx);
-                    } else {
-                        openCell(locId, blockId, flatIdx);
-                    }
+                const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cell');
+                if (target && target !== cellEl && target.dataset.row !== undefined) {
+                    const tRow = parseInt(target.dataset.row);
+                    const tCellIdx = parseInt(target.dataset.cellidx);
+                    swapCells(locId, blockId, rowIdx, cellIdxInRow, tRow, tCellIdx);
                 }
-                dragging = false; moved = false;
+                dragging = false;
+                justDragged = true; // подавляем последующий синтетический click после завершённого перетаскивания
+                setTimeout(() => { justDragged = false; }, 300);
             });
             cellEl.addEventListener('pointercancel', () => {
                 cellEl.classList.remove('dragging');
                 document.querySelectorAll('.cell.drag-over').forEach(el => el.classList.remove('drag-over'));
-                dragging = false; moved = false;
+                dragging = false;
+            });
+
+            // Открытие ячейки / выбор для массового кормления / просмотр по дате — через нативное событие click.
+            // v1.5.8: раньше клик вычислялся вручную по смещению пальца между нажатием и отпусканием — это
+            // путало быстрый скролл-флик с тапом (движение пальца могло быть маленьким, хотя жест был скроллом).
+            // Браузер сам корректно не генерирует click после скролла — полагаемся на его встроенную логику.
+            cellEl.addEventListener('click', () => {
+                if (justDragged) return;
+                if (massFeedState && massFeedState.blockId === blockId && massFeedState.locId === locId) {
+                    toggleCellMassSelect(locId, blockId, flatIdx);
+                } else if (calendarPreview && calendarPreview.locId === locId) {
+                    openCellDaySummary(locId, blockId, flatIdx);
+                } else {
+                    openCell(locId, blockId, flatIdx);
+                }
             });
         });
     }
@@ -1323,6 +1561,25 @@
 
         // Сервисное место не может принимать животных — скрываем кнопки заселения/кормления
         document.getElementById('cell-animal-actions').style.display = cell.isService ? 'none' : 'flex';
+
+        // Температурный журнал (v1.5.8)
+        if (!cell.tempLog) cell.tempLog = [];
+        const latestTemp = cell.tempLog.length > 0 ? cell.tempLog.reduce((latest, t) => (!latest || t.timestamp > latest.timestamp) ? t : latest, null) : null;
+        document.getElementById('cell-temp-current').textContent = latestTemp ? `${formatTemp(latestTemp.value)} (${formatLogDateTime(latestTemp.timestamp)})` : '—';
+        let tempHistoryHtml = '';
+        if (cell.tempLog.length > 0) {
+            tempHistoryHtml += `<div class="history-box">`;
+            cell.tempLog.slice().reverse().forEach((t, lIdx) => {
+                const realIdx = cell.tempLog.length - 1 - lIdx;
+                tempHistoryHtml += `
+                    <div class="log-row">
+                        <span>${formatLogDateTime(t.timestamp)} — <b>${formatTemp(t.value)}</b></span>
+                        <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteTempLog(${realIdx})">✖</button>
+                    </div>`;
+            });
+            tempHistoryHtml += `</div>`;
+        }
+        document.getElementById('cell-temp-history').innerHTML = tempHistoryHtml;
 
         renderInhabitants(cell);
         document.getElementById('modal-cell').style.display = 'block';
@@ -1358,7 +1615,7 @@
             // "Съедено" и "Частично" (съедено > 0) считаются как факт кормления для маркера "сыт"
             let statusTagHtml = `<span class="status-tag hungry">Голоден / Отказ</span>`;
             if(a.feed_logs && a.feed_logs.length > 0) {
-                let lastFeed = a.feed_logs[a.feed_logs.length - 1];
+                let lastFeed = getLatestFeedLog(a);
                 const wasFed = (lastFeed.status === 'Съедено' || lastFeed.status === 'Частично') && lastFeed.eatenCount > 0;
                 if(wasFed && (nowMs - Number(lastFeed.timestamp) < limitMs)) {
                     let leftHrs = Math.ceil((limitMs - (nowMs - Number(lastFeed.timestamp))) / (60 * 60 * 1000));
@@ -1395,17 +1652,19 @@
                     let badgeColor = log.status === 'Съедено' ? 'var(--green)' : log.status === 'Отказ' ? 'var(--red)' : log.status === 'Частично' ? 'var(--gold)' : log.status === 'Срыгивание' ? '#e57373' : '#888';
                     const eatenText = (log.eatenCount === null || log.eatenCount === undefined) ? '' : ` — съедено ${log.eatenCount} из ${log.count}`;
                     const reasonText = log.refusalReason ? `<div style="font-size:0.68rem; color:#e57373;">Причина: ${log.refusalReason}</div>` : '';
-                    const canFlagIssue = log.status === 'Съедено' || log.status === 'Частично';
+                    const forcedText = log.forced ? ` <span style="color:var(--purple); font-size:0.68rem;">[принудительно]</span>` : '';
+                    const canFlagIssue = (log.status === 'Съедено' || log.status === 'Частично') && (Date.now() - Number(log.timestamp) < REGURGITATION_WINDOW_MS);
                     feedLogHtml += `
                         <div class="log-row" style="flex-direction:column; align-items:stretch;">
                             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">
                                 <div style="flex:1;">
-                                    <span>${formatLogDateTime(log.timestamp, log.date)} — ${FEED_TYPE_LABELS[log.type] || log.type} [№${log.sizeNum}] ${log.sizeTitle} (${log.count} шт)${eatenText} <b style="color:${badgeColor}">[${log.status}]</b></span>
+                                    <span>${formatLogDateTime(log.timestamp, log.date)} — ${FEED_TYPE_LABELS[log.type] || log.type} [№${log.sizeNum}] ${log.sizeTitle} (${log.count} шт)${eatenText} <b style="color:${badgeColor}">[${log.status}]</b>${forcedText}</span>
                                     ${reasonText}
                                 </div>
                                 <div style="display:flex; gap:4px; flex-shrink:0;">
                                     ${log.status === 'Съедено' ? `<button class="btn-del" style="background:var(--gold); padding:2px 6px; font-size:0.65rem;" onclick="setLogStatus(${idx}, ${realActualIdx}, 'Отказ')">Отказ</button>` : ''}
-                                    ${canFlagIssue ? `<button class="btn-del" style="background:#e57373; padding:2px 6px; font-size:0.65rem;" onclick="setLogStatus(${idx}, ${realActualIdx}, 'Срыгивание')">🤮 Срыгнул</button>` : ''}
+                                    ${canFlagIssue ? `<button class="btn-del" style="background:#e57373; padding:2px 6px; font-size:0.65rem;" onclick="setLogStatus(${idx}, ${realActualIdx}, 'Срыгивание')">Срыг</button>` : ''}
+                                    <button class="btn-del" style="background:#37474f; padding:2px 6px; font-size:0.65rem;" onclick="openEditFeedLogModal(${idx}, ${realActualIdx})">✏</button>
                                     <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteLogItem(${idx}, ${realActualIdx})">✖</button>
                                 </div>
                             </div>
@@ -1436,7 +1695,20 @@
                 shedLogHtml += `</div>`;
             }
 
-            const notesHtml = a.notes ? `<div style="font-size:0.78rem; color:#aaa; margin-bottom:8px; font-style:italic;">📝 ${a.notes}</div>` : '';
+            // --- Журнал заметок о состоянии (v1.5.8): дозаписи с датой/временем, как история кормлений/линек ---
+            let notesLogHtml = '';
+            if(a.notesLog && a.notesLog.length > 0) {
+                notesLogHtml += `<div class="history-box"><strong>📝 Заметки:</strong>`;
+                a.notesLog.slice().reverse().forEach((n, lIdx) => {
+                    let realActualIdx = a.notesLog.length - 1 - lIdx;
+                    notesLogHtml += `
+                        <div class="log-row">
+                            <span style="flex:1;"><span style="color:#888; font-size:0.7rem;">${formatLogDateTime(n.timestamp)}</span> — ${n.text}</span>
+                            <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteAnimalNote(${idx}, ${realActualIdx})">✖</button>
+                        </div>`;
+                });
+                notesLogHtml += `</div>`;
+            }
 
             list.innerHTML += `
                 <div class="animal-item">
@@ -1445,9 +1717,9 @@
                         ${statusTagHtml}
                     </div>
                     <div style="font-size:0.8rem; color:#aaa; margin-bottom: 8px;">Возраст: ${formatAge(a)}</div>
-                    ${notesHtml}
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                         <button class="btn-main" style="padding:6px 10px; font-size:0.75rem; margin:0; background: #555;" onclick="openSheddingModal(${idx})">🦎 ЛИНЬКА</button>
+                        <button class="btn-main" style="padding:6px 10px; font-size:0.75rem; margin:0; background:#795548;" onclick="openAddNoteModal(${idx})">📝 ЗАМЕТКА</button>
                         <button class="btn-main" style="padding:6px 10px; font-size:0.75rem; margin:0; background:#37474f;" onclick="openAnimalReport(${idx})">📊 ОТЧЁТ</button>
                         <button class="edit-ui btn-opt" style="padding:6px 10px; font-size:0.75rem" onclick="openAnimalForm(${idx})">ПРАВКА</button>
                         <button class="edit-ui btn-opt" style="padding:6px 10px; font-size:0.75rem; background:var(--purple);" onclick="openTransferModal(${idx})">🚚 ПЕРЕЕЗД</button>
@@ -1457,6 +1729,7 @@
                     ${nightResolveHtml}
                     ${feedLogHtml}
                     ${shedLogHtml}
+                    ${notesLogHtml}
                 </div>`;
         });
         document.getElementById('cell-bulk-feed-btn').style.display = cell.animals.length > 0 ? 'block' : 'none';
@@ -1477,6 +1750,50 @@
         const cell = getCell(state.locId, state.blockId, state.cellIdx);
         cell.animals[animalIdx].feed_logs[logIdx].comment = value;
         save(); openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    // --- Редактирование уже внесённой записи кормления (v1.5.8) — раньше можно было только удалить и внести заново ---
+    let editLogContext = null; // { animalIdx, logIdx }
+    function openEditFeedLogModal(animalIdx, logIdx) {
+        editLogContext = { animalIdx, logIdx };
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const log = cell.animals[animalIdx].feed_logs[logIdx];
+        document.getElementById('editlog-type').value = log.type;
+        renderEditLogSizes();
+        document.getElementById('editlog-size').value = log.sizeNum;
+        document.getElementById('editlog-count').value = log.count;
+        document.getElementById('editlog-eaten').value = (log.eatenCount === null || log.eatenCount === undefined) ? '' : log.eatenCount;
+        document.getElementById('editlog-comment').value = log.comment || '';
+        showModal('modal-edit-feedlog');
+    }
+    function renderEditLogSizes() {
+        const type = document.getElementById('editlog-type').value;
+        const select = document.getElementById('editlog-size'); select.innerHTML = '';
+        let source = type === 'RATS' ? RATS : type === 'MICE' ? MICE : RABBITS;
+        source.forEach(item => { select.innerHTML += `<option value="${item.n}">[№${item.n}] ${item.t} (~${item.w}г)</option>`; });
+    }
+    function saveEditedFeedLog() {
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const log = cell.animals[editLogContext.animalIdx].feed_logs[editLogContext.logIdx];
+        const type = document.getElementById('editlog-type').value;
+        const sizeNum = parseInt(document.getElementById('editlog-size').value);
+        let source = type === 'RATS' ? RATS : type === 'MICE' ? MICE : RABBITS;
+        let item = source.find(i => i.n === sizeNum);
+        log.type = type; log.sizeNum = sizeNum; log.sizeTitle = item.t; log.weightUnit = item.w;
+        log.count = parseInt(document.getElementById('editlog-count').value) || 1;
+        const eatenRaw = document.getElementById('editlog-eaten').value;
+        log.eatenCount = eatenRaw === '' ? null : parseInt(eatenRaw);
+        // Статус подстраивается под новое значение "съедено", если запись уже была разрешена (не "оставлен на ночь")
+        if (log.status !== 'Оставлен на ночь') {
+            if (log.eatenCount === null) { /* оставляем статус как есть, если явно очистили поле */ }
+            else if (log.eatenCount <= 0) log.status = 'Отказ';
+            else if (log.eatenCount < log.count) log.status = 'Частично';
+            else if (log.status !== 'Срыгивание') log.status = 'Съедено';
+        }
+        log.comment = document.getElementById('editlog-comment').value.trim();
+        save();
+        closeModals();
+        openCell(state.locId, state.blockId, state.cellIdx);
     }
 
     function deleteLogItem(animalIdx, logIdx) {
@@ -1540,7 +1857,6 @@
                 document.querySelector(`.a-opt[data-val="${a.age}"]`)?.classList.add('active');
                 document.getElementById('a-birth-month').value = a.birthMonth || '';
                 document.getElementById('a-birth-year').value = a.birthYear || '';
-                document.getElementById('a-notes').value = a.notes || '';
             }
         } else {
             document.getElementById('a-species').value = '';
@@ -1548,7 +1864,6 @@
             document.getElementById('a-opt-a').classList.add('active');
             document.getElementById('a-birth-month').value = '';
             document.getElementById('a-birth-year').value = '';
-            document.getElementById('a-notes').value = '';
         }
         document.getElementById('modal-animal-form').style.display = 'block';
     }
@@ -1562,11 +1877,10 @@
             species, gender: document.querySelector('.g-opt.active')?.dataset.val || '○',
             age: document.querySelector('.a-opt.active')?.dataset.val || 'Ad.',
             birthMonth: document.getElementById('a-birth-month').value,
-            birthYear: document.getElementById('a-birth-year').value,
-            notes: document.getElementById('a-notes').value.trim()
+            birthYear: document.getElementById('a-birth-year').value
         };
         if(state.animalIdx !== null) { cell.animals[state.animalIdx] = { ...cell.animals[state.animalIdx], ...data }; } 
-        else { cell.animals.push({ ...data, feed_logs: [], shed_logs: [], shed_status: 'Норма' }); }
+        else { cell.animals.push({ ...data, feed_logs: [], shed_logs: [], shed_status: 'Норма', notesLog: [] }); }
         save(); closeModals(); openCell(state.locId, state.blockId, state.cellIdx);
     }
 
@@ -1611,10 +1925,13 @@
             cell.animals.forEach((_, idx) => { if(document.getElementById(`chk-a-${idx}`).checked) state.selectedBulkIdxs.push(idx); });
         }
         if(state.selectedBulkIdxs.length === 0) return alert("Никто не выбран");
+        document.getElementById('feed-form-title').textContent = 'Параметры корма';
         document.getElementById('feed-type').value = 'RATS'; renderFeedSizes();
-        document.getElementById('feed-night-mode').checked = false;
+        document.querySelectorAll('.feed-method-opt').forEach(b => b.classList.remove('active'));
+        document.querySelector('.feed-method-opt[data-val="normal"]').classList.add('active');
         document.getElementById('feed-comment').value = '';
         document.getElementById('modal-bulk-feed-select').style.display = 'none';
+        state.feedContext = 'single';
         showModal('modal-feed');
     }
 
@@ -1625,39 +1942,52 @@
         source.forEach(item => { select.innerHTML += `<option value="${item.n}">[№${item.n}] ${item.t} (~${item.w}г)</option>`; });
     }
 
-    function saveFeeding() {
-        const type = document.getElementById('feed-type').value;
-        const sizeNum = parseInt(document.getElementById('feed-size').value);
-        const count = parseInt(document.getElementById('feed-count').value) || 1;
-        const isNight = document.getElementById('feed-night-mode').checked;
-        const comment = document.getElementById('feed-comment').value.trim();
-        
-        let source = type === 'RATS' ? RATS : type === 'MICE' ? MICE : RABBITS;
-        let item = source.find(i => i.n === sizeNum);
-        const cell = getCell(state.locId, state.blockId, state.cellIdx);
-
-        state.selectedBulkIdxs.forEach(idx => {
-            let animal = cell.animals[idx];
-            if(!animal.feed_logs) animal.feed_logs = [];
-            
-            let newLog = {
-                timestamp: Date.now(), 
-                date: new Date().toISOString().slice(0,10),
-                type: type, 
-                sizeNum: sizeNum, 
-                sizeTitle: item.t, 
-                weightUnit: item.w, 
-                count: count,
-                // eatenCount: сколько реально съедено. При немедленном кормлении считаем съеденным сразу всё;
+    // Применяет одну и ту же запись кормления к списку целей [{animal}] — используется и для одиночного,
+    // и для массового кормления (v1.5.8), чтобы логика создания записи не дублировалась в двух местах.
+    function applyFeedingRecord(animals, { type, sizeNum, sizeTitle, weightUnit, count, isNight, isForced, comment }) {
+        animals.forEach(animal => {
+            if (!animal.feed_logs) animal.feed_logs = [];
+            animal.feed_logs.push({
+                timestamp: Date.now(),
+                date: new Date().toISOString().slice(0, 10),
+                type, sizeNum, sizeTitle, weightUnit, count,
+                // eatenCount: сколько реально съедено. При немедленном/принудительном кормлении считаем съеденным сразу всё;
                 // частичное поедание фиксируется только для варианта "оставлен на ночь" — через resolveNightFeedForAnimal().
                 eatenCount: isNight ? null : count,
                 refusalReason: '',
                 comment: comment,
+                forced: !!isForced,
                 status: isNight ? 'Оставлен на ночь' : 'Съедено'
-            };
-            animal.feed_logs.push(newLog);
+            });
         });
-        
+    }
+
+    function readFeedFormValues() {
+        const type = document.getElementById('feed-type').value;
+        const sizeNum = parseInt(document.getElementById('feed-size').value);
+        const count = parseInt(document.getElementById('feed-count').value) || 1;
+        const method = document.querySelector('.feed-method-opt.active')?.dataset.val || 'normal';
+        const comment = document.getElementById('feed-comment').value.trim();
+        let source = type === 'RATS' ? RATS : type === 'MICE' ? MICE : RABBITS;
+        let item = source.find(i => i.n === sizeNum);
+        return {
+            type, sizeNum, sizeTitle: item.t, weightUnit: item.w, count,
+            isNight: method === 'night', isForced: method === 'forced', comment
+        };
+    }
+
+    // Диспетчер: одна и та же форма кормления обслуживает и одиночное, и массовое кормление (v1.5.8)
+    function submitFeedForm() {
+        if (state.feedContext === 'mass') saveMassFeeding();
+        else saveFeeding();
+    }
+
+    function saveFeeding() {
+        const params = readFeedFormValues();
+        const cell = getCell(state.locId, state.blockId, state.cellIdx);
+        const animals = state.selectedBulkIdxs.map(idx => cell.animals[idx]);
+        applyFeedingRecord(animals, params);
+
         save(); // было localStorage.setItem(...) напрямую — цветовой маркер на стеллаже не обновлялся сразу
         closeModals(); 
         openCell(state.locId, state.blockId, state.cellIdx);
@@ -1907,12 +2237,13 @@ ${bodyHtml}
         let feedRows = '';
         (animal.feed_logs || []).slice().reverse().forEach(log => {
             const eaten = (log.eatenCount === null || log.eatenCount === undefined) ? '—' : log.eatenCount;
+            const statusText = log.status + (log.forced ? ' (принудительно)' : '');
             feedRows += `<tr>
                 <td>${formatLogDateTime(log.timestamp, log.date)}</td>
                 <td>${FEED_TYPE_LABELS[log.type] || log.type} [№${log.sizeNum}] ${log.sizeTitle}</td>
                 <td>${log.count}</td>
                 <td>${eaten}</td>
-                <td>${log.status}</td>
+                <td>${statusText}</td>
                 <td>${log.refusalReason || ''}</td>
                 <td>${log.comment || ''}</td>
             </tr>`;
@@ -1921,9 +2252,12 @@ ${bodyHtml}
         (animal.shed_logs || []).slice().reverse().forEach(log => {
             shedRows += `<tr><td>${formatLogDateTime(log.timestamp, log.date)}</td><td>${log.status}</td></tr>`;
         });
+        let notesRows = '';
+        (animal.notesLog || []).slice().reverse().forEach(n => {
+            notesRows += `<tr><td>${formatLogDateTime(n.timestamp)}</td><td>${n.text}</td></tr>`;
+        });
         return `
             <h3>${animal.species} [${animal.gender}] — ${blockName}, место ${address}</h3>
-            ${animal.notes ? `<p style="font-style:italic; color:#777;">📝 ${animal.notes}</p>` : ''}
             <table class="rep-table">
                 <thead><tr><th>Дата/время</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Статус</th><th>Причина отказа</th><th>Комментарий</th></tr></thead>
                 <tbody>${feedRows || '<tr><td colspan="7">Нет записей о кормлении</td></tr>'}</tbody>
@@ -1931,6 +2265,10 @@ ${bodyHtml}
             <table class="rep-table">
                 <thead><tr><th>Дата/время</th><th>Статус линьки</th></tr></thead>
                 <tbody>${shedRows || '<tr><td colspan="2">Нет записей о линьке</td></tr>'}</tbody>
+            </table>
+            <table class="rep-table">
+                <thead><tr><th>Дата/время</th><th>Заметка</th></tr></thead>
+                <tbody>${notesRows || '<tr><td colspan="2">Нет заметок</td></tr>'}</tbody>
             </table>`;
     }
 
@@ -1967,6 +2305,7 @@ ${bodyHtml}
         const weekMs = 7 * 24 * 60 * 60 * 1000;
         const cutoff = Date.now() - weekMs;
         let summary = {};
+        let typeSummary = {}; // v1.5.8: сводка по видам КО целиком (Крысы/Мыши/Кролики), без разбивки по размерам
         let totalEatenBiomass = 0, totalWrittenOffBiomass = 0;
 
         loc.blocks.forEach(block => {
@@ -1983,18 +2322,34 @@ ${bodyHtml}
                         summary[key].written += log.count;
                         totalEatenBiomass += eaten * log.weightUnit;
                         totalWrittenOffBiomass += log.count * log.weightUnit;
+
+                        if (!typeSummary[log.type]) typeSummary[log.type] = { eaten: 0, written: 0, eatenWeight: 0, writtenWeight: 0 };
+                        typeSummary[log.type].eaten += eaten;
+                        typeSummary[log.type].written += log.count;
+                        typeSummary[log.type].eatenWeight += eaten * log.weightUnit;
+                        typeSummary[log.type].writtenWeight += log.count * log.weightUnit;
                     });
                 });
             });
         });
 
+        const fmtWeight = (g) => g >= 1000 ? (g / 1000).toFixed(2) + ' кг' : g.toFixed(0) + ' г';
+
+        const typeRows = Object.keys(typeSummary).map(t => `
+            <tr><td>${FEED_TYPE_LABELS[t] || t}</td><td>${typeSummary[t].written} шт (${fmtWeight(typeSummary[t].writtenWeight)})</td><td>${typeSummary[t].eaten} шт (${fmtWeight(typeSummary[t].eatenWeight)})</td></tr>`).join('');
+
         const rows = Object.values(summary).map(s => `
             <tr><td>${s.species}</td><td>${FEED_TYPE_LABELS[s.type] || s.type} [№${s.num}] ${s.title}</td><td>${s.eaten}</td><td>${s.written}</td></tr>`).join('');
 
-        const fmtWeight = (g) => g >= 1000 ? (g / 1000).toFixed(2) + ' кг' : g.toFixed(0) + ' г';
         const bodyHtml = `
             <p>Локация: <b>${loc.name}</b>. Период: последние 7 дней (${new Date(cutoff).toLocaleDateString('ru-RU')} — ${new Date().toLocaleDateString('ru-RU')}).</p>
             <p>Итого съедено (биомасса питания): <b>${fmtWeight(totalEatenBiomass)}</b> &nbsp;|&nbsp; Итого списано КО (расход/утилизация): <b>${fmtWeight(totalWrittenOffBiomass)}</b></p>
+            <h3>Сводка по видам КО за неделю</h3>
+            <table class="rep-table">
+                <thead><tr><th>Вид КО</th><th>Списано всего (шт, вес)</th><th>Съедено всего (шт, вес)</th></tr></thead>
+                <tbody>${typeRows || '<tr><td colspan="3">Нет кормлений за период</td></tr>'}</tbody>
+            </table>
+            <h3>Детально по видам животных и размерам КО</h3>
             <table class="rep-table">
                 <thead><tr><th>Вид животного</th><th>Кормовой объект</th><th>Съедено, шт</th><th>Списано КО, шт</th></tr></thead>
                 <tbody>${rows || '<tr><td colspan="4">Нет кормлений за последние 7 дней</td></tr>'}</tbody>
@@ -2077,12 +2432,21 @@ ${bodyHtml}
                     </div>`;
             }
             
-            loc.blocks.forEach(block => {
+            loc.blocks.forEach((block, blockIdx) => {
+                const isMassFeedingThisBlock = massFeedState && massFeedState.locId === loc.id && massFeedState.blockId === block.id;
                 html += `
                     <div class="block-unit">
                         <div class="block-header">
                             <span onclick="isLocked ? null : openBlockModal(${loc.id}, ${block.id})">${block.name} <span style="font-size:0.75rem; color:#777;">[${block.type}]</span></span>
-                            <span class="edit-ui" style="color:var(--red); font-size:1.2rem; cursor:pointer;" onclick="deleteBlock(${loc.id}, ${block.id})">✖</span>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="edit-ui" style="font-size:0.9rem; cursor:pointer; color:#888;" onclick="moveBlock(${loc.id}, ${block.id}, -1)">▲</span>
+                                <span class="edit-ui" style="font-size:0.9rem; cursor:pointer; color:#888;" onclick="moveBlock(${loc.id}, ${block.id}, 1)">▼</span>
+                                ${isMassFeedingThisBlock
+                                    ? `<span style="font-size:0.75rem; cursor:pointer; color:var(--gold);" onclick="cancelMassFeed()">✖ Отменить выбор</span>`
+                                    : `<span style="font-size:0.75rem; cursor:pointer; color:var(--purple);" onclick="startMassFeed(${loc.id}, ${block.id})">🍖 Групповое кормление</span>`
+                                }
+                                <span class="edit-ui" style="color:var(--red); font-size:1.2rem; cursor:pointer;" onclick="deleteBlock(${loc.id}, ${block.id})">✖</span>
+                            </div>
                         </div>
                         <div class="rack"><div class="rack-inner">`;
 
@@ -2125,7 +2489,7 @@ ${bodyHtml}
 
                             isAllFed48h = cell.animals.every(a => {
                                 if(!a.feed_logs || a.feed_logs.length === 0) return false;
-                                let lastFeed = a.feed_logs[a.feed_logs.length - 1];
+                                let lastFeed = getLatestFeedLog(a);
                                 const wasFed = (lastFeed.status === 'Съедено' || lastFeed.status === 'Частично') && lastFeed.eatenCount > 0;
                                 return (wasFed && (nowMs - Number(lastFeed.timestamp) < limitMs));
                             });
@@ -2154,8 +2518,17 @@ ${bodyHtml}
                             if (isNightFeedMode) modeClass += ' night-feed-mode';
                         }
 
+                        let massSelectClass = '';
+                        let massCheckHtml = '';
+                        if (isMassFeedingThisBlock && !cell.isService) {
+                            const isSelected = massFeedState.selectedCells.has(idx);
+                            massSelectClass = isSelected ? ' mass-selected' : ' mass-selectable';
+                            massCheckHtml = `<div class="mass-select-check">${isSelected ? '✓' : ''}</div>`;
+                        }
+
                         html += `
-                            <div class="cell ${modeClass}" style="--cw:${width}; ${previewStyle}" data-loc="${loc.id}" data-block="${block.id}" data-row="${rIdx}" data-cellidx="${cIdxInRow}" data-flat="${idx}">
+                            <div class="cell ${modeClass}${massSelectClass}" style="--cw:${width}; ${previewStyle}" data-loc="${loc.id}" data-block="${block.id}" data-row="${rIdx}" data-cellidx="${cIdxInRow}" data-flat="${idx}">
+                                ${massCheckHtml}
                                 <div class="cell-num">${address}</div>
                                 <div class="cell-info">${displayTitle} ${hasAnimals && cell.animals.length > 1 ? '<span style="color:var(--blue)">+' + (cell.animals.length-1) + '</span>' : ''}</div>
                                 ${sheddingDaysText}
@@ -2176,6 +2549,17 @@ ${bodyHtml}
         });
         updateUIElements();
         attachCellDragHandlers();
+        updateMassFeedBar();
+    }
+
+    function updateMassFeedBar() {
+        const bar = document.getElementById('mass-feed-bar');
+        if (massFeedState) {
+            bar.classList.add('active');
+            document.getElementById('mass-feed-count').textContent = `Выбрано: ${massFeedState.selectedCells.size}`;
+        } else {
+            bar.classList.remove('active');
+        }
     }
 
     function deleteLoc(id) { if(confirm("Удалить локацию?")) { db = db.filter(l => l.id !== id); collapsedLocs.delete(id); saveCollapsedState(); save(); } }
@@ -2411,7 +2795,7 @@ ${bodyHtml}
             age: source.age,
             birthMonth: source.birthMonth,
             birthYear: source.birthYear,
-            notes: source.notes || '',
+            notesLog: [],
             // Новая отдельная особь — своя, чистая история, не унаследованная от оригинала
             feed_logs: [], shed_logs: [], shed_status: 'Норма'
         });
@@ -2512,6 +2896,20 @@ ${bodyHtml}
     }
     tickClock();
     setInterval(tickClock, 1000);
+
+    // v1.5.8: закреплённый крестик закрытия — добавляется один раз в каждую модалку programmatically,
+    // чтобы не дублировать разметку в 17 местах вручную
+    function initModalCloseButtons() {
+        document.querySelectorAll('.modal').forEach(m => {
+            if (m.querySelector('.modal-close-x')) return;
+            const x = document.createElement('div');
+            x.className = 'modal-close-x';
+            x.innerHTML = '✕';
+            x.onclick = closeModals;
+            m.appendChild(x);
+        });
+    }
+    initModalCloseButtons();
 
     render();
 </script>
