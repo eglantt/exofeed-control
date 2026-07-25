@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.5.8</title>
+    <title>ExoFeed Control v1.5.9</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -246,7 +246,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.5.8-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.5.9-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -406,7 +406,7 @@
         <div style="background:#252525; padding:12px; border-radius:8px; margin-bottom:12px;">
             <label style="color:#fff; font-weight:bold;">Способ подачи</label>
             <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-top:6px;">
-                <button type="button" class="btn-opt feed-method-opt active" data-val="normal" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem;">Обычно</button>
+                <button type="button" class="btn-opt feed-method-opt active" data-val="normal" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem;">Сразу</button>
                 <button type="button" class="btn-opt feed-method-opt" data-val="night" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem; color:var(--gold);">На ночь</button>
                 <button type="button" class="btn-opt feed-method-opt" data-val="forced" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem;">Принудительно</button>
             </div>
@@ -619,8 +619,8 @@
 </div>
 
 <div class="bottom-nav">
-    <div onclick="showModalLocation(null)" class="nav-item edit-ui">+ Локация</div>
     <div onclick="toggleLock()" class="nav-item" id="lock-status-bottom">🔒 РАБОТА</div>
+    <div onclick="showModalLocation(null)" class="nav-item edit-ui">+ Локация</div>
     <div onclick="openGlobalSearch()" class="nav-item">🔍 Поиск</div>
     <div onclick="openArchive()" class="nav-item">📁 Архив</div>
     <div onclick="triggerImport()" class="nav-item">📂 Импорт</div>
@@ -1167,12 +1167,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.5.8';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.5.9';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -2400,7 +2400,11 @@ ${bodyHtml}
                             <span class="loc-collapse-arrow">${isCollapsed ? '▸' : '▾'}</span>
                             <b style="font-size:1.15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" onclick="event.stopPropagation(); if(!isLocked) showModalLocation(${loc.id});">${loc.name}</b>
                         </div>
-                        <button class="btn-del edit-ui" onclick="deleteLoc(${loc.id})">Удалить комнату</button>
+                        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                            <span class="edit-ui" style="font-size:0.9rem; cursor:pointer; color:#888;" onclick="moveLocation(${loc.id}, -1)">▲</span>
+                            <span class="edit-ui" style="font-size:0.9rem; cursor:pointer; color:#888;" onclick="moveLocation(${loc.id}, 1)">▼</span>
+                            <button class="btn-del edit-ui" onclick="deleteLoc(${loc.id})">Удалить комнату</button>
+                        </div>
                     </div>`;
 
             if (isCollapsed) {
