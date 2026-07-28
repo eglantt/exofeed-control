@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.5.9</title>
+    <title>ExoFeed Control v1.5.10</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -246,7 +246,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.5.9-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.5.10-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -1167,12 +1167,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.5.9';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.5.10';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -2307,17 +2307,35 @@ ${bodyHtml}
         let summary = {};
         let typeSummary = {}; // v1.5.8: сводка по видам КО целиком (Крысы/Мыши/Кролики), без разбивки по размерам
         let totalEatenBiomass = 0, totalWrittenOffBiomass = 0;
+        let chronoEvents = []; // v1.5.10: построчная хронология всех кормлений за неделю (с датами и адресами) — раньше отдельные даты в отчёт вообще не попадали, терялись на этапе суммирования
 
         loc.blocks.forEach(block => {
-            getBlockCells(block).forEach(cell => {
+            getBlockCells(block).forEach((cell, cIdx) => {
                 if (cell.isService) return;
+                const pos = locateCellPosition(block, cIdx);
+                const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
                 cell.animals.forEach(a => {
                     (a.feed_logs || []).forEach(log => {
                         if (Number(log.timestamp) < cutoff) return;
-                        if (log.status === 'Оставлен на ночь') return; // ещё не разрешено — не учитываем в итоге недели
+
+                        const eaten = (log.eatenCount !== null && log.eatenCount !== undefined) ? log.eatenCount : (log.status === 'Съедено' ? log.count : 0);
+
+                        // Хронология — построчно, включая записи "Оставлен на ночь" (ещё не разрешённые):
+                        // это отчёт о том, что физически происходило по датам, а не только об итогах.
+                        chronoEvents.push({
+                            timestamp: Number(log.timestamp) || 0,
+                            fallbackDate: log.date,
+                            address, blockName: block.name,
+                            species: a.species,
+                            typeLabel: FEED_TYPE_LABELS[log.type] || log.type,
+                            sizeNum: log.sizeNum, sizeTitle: log.sizeTitle,
+                            count: log.count, eaten,
+                            statusText: log.status + (log.forced ? ' (принудительно)' : '')
+                        });
+
+                        if (log.status === 'Оставлен на ночь') return; // ещё не разрешено — не учитываем в итоговых суммах недели
                         const key = `${a.species}_${log.type}_${log.sizeNum}`;
                         if (!summary[key]) summary[key] = { species: a.species, type: log.type, num: log.sizeNum, title: log.sizeTitle, eaten: 0, written: 0 };
-                        const eaten = (log.eatenCount !== null && log.eatenCount !== undefined) ? log.eatenCount : (log.status === 'Съедено' ? log.count : 0);
                         summary[key].eaten += eaten;
                         summary[key].written += log.count;
                         totalEatenBiomass += eaten * log.weightUnit;
@@ -2341,6 +2359,10 @@ ${bodyHtml}
         const rows = Object.values(summary).map(s => `
             <tr><td>${s.species}</td><td>${FEED_TYPE_LABELS[s.type] || s.type} [№${s.num}] ${s.title}</td><td>${s.eaten}</td><td>${s.written}</td></tr>`).join('');
 
+        chronoEvents.sort((a, b) => b.timestamp - a.timestamp); // самое свежее — сверху, как и в остальных отчётах
+        const chronoRows = chronoEvents.map(e => `
+            <tr><td>${formatLogDateTime(e.timestamp, e.fallbackDate)}</td><td>${e.blockName}, ${e.address}</td><td>${e.species}</td><td>${e.typeLabel} [№${e.sizeNum}] ${e.sizeTitle}</td><td>${e.count}</td><td>${e.eaten === null || e.eaten === undefined ? '—' : e.eaten}</td><td>${e.statusText}</td></tr>`).join('');
+
         const bodyHtml = `
             <p>Локация: <b>${loc.name}</b>. Период: последние 7 дней (${new Date(cutoff).toLocaleDateString('ru-RU')} — ${new Date().toLocaleDateString('ru-RU')}).</p>
             <p>Итого съедено (биомасса питания): <b>${fmtWeight(totalEatenBiomass)}</b> &nbsp;|&nbsp; Итого списано КО (расход/утилизация): <b>${fmtWeight(totalWrittenOffBiomass)}</b></p>
@@ -2353,6 +2375,11 @@ ${bodyHtml}
             <table class="rep-table">
                 <thead><tr><th>Вид животного</th><th>Кормовой объект</th><th>Съедено, шт</th><th>Списано КО, шт</th></tr></thead>
                 <tbody>${rows || '<tr><td colspan="4">Нет кормлений за последние 7 дней</td></tr>'}</tbody>
+            </table>
+            <h3>Хронология кормлений за неделю</h3>
+            <table class="rep-table">
+                <thead><tr><th>Дата/время</th><th>Место</th><th>Животное</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Статус</th></tr></thead>
+                <tbody>${chronoRows || '<tr><td colspan="7">Нет кормлений за последние 7 дней</td></tr>'}</tbody>
             </table>`;
         showReportModal(`Недельный отчёт — ${loc.name}`, bodyHtml, `weekly_report_${loc.name.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.html`);
     }
@@ -2384,7 +2411,14 @@ ${bodyHtml}
     function updateUIElements() { document.querySelectorAll('.edit-ui').forEach(el => el.style.display = isLocked ? 'none' : 'block'); }
 
     function render() {
-        const app = document.getElementById('app'); app.innerHTML = '';
+        const app = document.getElementById('app');
+        // v1.5.10: перед полной перестройкой DOM запоминаем, насколько был прокручен каждый стеллаж
+        // (сама перерисовка создаёт все элементы заново, включая .rack — без этого скролл всегда сбрасывался в 0)
+        const rackScrollPositions = {};
+        app.querySelectorAll('.rack[data-block-id]').forEach(el => {
+            rackScrollPositions[el.dataset.blockId] = el.scrollLeft;
+        });
+        app.innerHTML = '';
         const nowMs = Date.now();
         const limitMs = FED_INDICATOR_MS;
 
@@ -2452,7 +2486,7 @@ ${bodyHtml}
                                 <span class="edit-ui" style="color:var(--red); font-size:1.2rem; cursor:pointer;" onclick="deleteBlock(${loc.id}, ${block.id})">✖</span>
                             </div>
                         </div>
-                        <div class="rack"><div class="rack-inner">`;
+                        <div class="rack" data-block-id="${block.id}"><div class="rack-inner">`;
 
                 // Адрес места = буква ряда (A,B,C...) + номер места в ряду (1,2,3...), вычисляется на лету
                 let flatIdx = 0;
@@ -2554,6 +2588,11 @@ ${bodyHtml}
         updateUIElements();
         attachCellDragHandlers();
         updateMassFeedBar();
+        // v1.5.10: возвращаем стеллажи на ту же горизонтальную позицию, что была до перерисовки
+        app.querySelectorAll('.rack[data-block-id]').forEach(el => {
+            const saved = rackScrollPositions[el.dataset.blockId];
+            if (saved) el.scrollLeft = saved;
+        });
     }
 
     function updateMassFeedBar() {
