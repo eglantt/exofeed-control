@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.5.10</title>
+    <title>ExoFeed Control v1.6.0</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -246,7 +246,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.5.10-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.6.0-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -409,6 +409,14 @@
                 <button type="button" class="btn-opt feed-method-opt active" data-val="normal" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem;">Сразу</button>
                 <button type="button" class="btn-opt feed-method-opt" data-val="night" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem; color:var(--gold);">На ночь</button>
                 <button type="button" class="btn-opt feed-method-opt" data-val="forced" onclick="selectOpt(this, 'feed-method-opt')" style="padding:8px 4px; font-size:0.78rem;">Принудительно</button>
+            </div>
+        </div>
+        <div style="background:#252525; padding:12px; border-radius:8px; margin-bottom:12px;">
+            <label style="color:#fff; font-weight:bold;">Состояние КО</label>
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-top:6px;">
+                <button type="button" class="btn-opt koState-opt active" data-val="prekilled" onclick="selectOpt(this, 'koState-opt')" style="padding:8px 4px; font-size:0.78rem;">Предубит</button>
+                <button type="button" class="btn-opt koState-opt" data-val="thawed" onclick="selectOpt(this, 'koState-opt')" style="padding:8px 4px; font-size:0.78rem;">Разморозка</button>
+                <button type="button" class="btn-opt koState-opt" data-val="live" onclick="selectOpt(this, 'koState-opt')" style="padding:8px 4px; font-size:0.78rem; color:var(--gold);">Живой</button>
             </div>
         </div>
         <div class="form-group">
@@ -618,6 +626,15 @@
     </div>
 </div>
 
+<div id="modal-morning-check" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+        <h4>🌙 Утренняя проверка — <span id="mc-block-name"></span></h4>
+        <button class="btn-main" style="background:var(--green); margin-bottom:10px;" onclick="applyMorningCheckBulk()">✔ Отметить выбранное как съедено полностью</button>
+        <div id="morning-check-list" style="max-height:55vh; overflow-y:auto;"></div>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
+    </div>
+</div>
+
 <div class="bottom-nav">
     <div onclick="toggleLock()" class="nav-item" id="lock-status-bottom">🔒 РАБОТА</div>
     <div onclick="showModalLocation(null)" class="nav-item edit-ui">+ Локация</div>
@@ -644,6 +661,9 @@
         {n:3, t:"Кролик крупный (взрослый)", w:3500, l:"> 40"}
     ];
     const FEED_TYPE_LABELS = { 'RATS': 'Крыса', 'MICE': 'Мышь', 'RABBITS': 'Кролик' };
+    // v1.6.0: состояние кормового объекта на момент подачи — влияет на то, утилизируется ли он,
+    // если оставлен на ночь и не тронут (см. applyFeedingRecord / resolveNightFeedCore).
+    const KO_STATE_LABELS = { 'prekilled': 'Предубит', 'thawed': 'Разморозка', 'live': 'Живой' };
     const FED_INDICATOR_HOURS = 72; // сколько часов держится зелёная отметка "сыт" после кормления (v1.5.1: было 48)
     const FED_INDICATOR_MS = FED_INDICATOR_HOURS * 60 * 60 * 1000;
     const REGURGITATION_WINDOW_HOURS = 144; // v1.5.8: окно, в течение которого можно отметить срыгивание — 6 суток
@@ -691,10 +711,18 @@
     // v1.5.8: раньше "последней" записью кормления считался последний ЭЛЕМЕНТ МАССИВА — это ломалось,
     // если записи оказывались не в хронологическом порядке (например, после импорта бэкапа с другого устройства).
     // Теперь ищем запись по буквально самой поздней метке времени — порядок в массиве больше не имеет значения.
+    //
+    // v1.6.0: "эффективное время" записи — это resolvedAt (момент утренней фиксации), если он есть, иначе timestamp
+    // (момент подачи). Раньше timestamp при утренней фиксации перезаписывался на текущее время, поэтому "последней"
+    // и так получалась только что разрешённая запись; теперь timestamp сохраняет исходный момент подачи (это и была
+    // цель фикса), поэтому сравнение и таймер "сыт" явно считаются по resolvedAt||timestamp, а не по timestamp.
+    function getFeedEffectiveTime(log) {
+        return Number(log.resolvedAt || log.timestamp) || 0;
+    }
     function getLatestFeedLog(animal) {
         if (!animal.feed_logs || animal.feed_logs.length === 0) return null;
         return animal.feed_logs.reduce((latest, log) =>
-            (!latest || Number(log.timestamp) > Number(latest.timestamp)) ? log : latest, null);
+            (!latest || getFeedEffectiveTime(log) > getFeedEffectiveTime(latest)) ? log : latest, null);
     }
 
     // --- Журнал заметок о состоянии животного (v1.5.8) ---
@@ -901,6 +929,8 @@
         document.getElementById('feed-type').value = 'RATS'; renderFeedSizes();
         document.querySelectorAll('.feed-method-opt').forEach(b => b.classList.remove('active'));
         document.querySelector('.feed-method-opt[data-val="normal"]').classList.add('active');
+        document.querySelectorAll('.koState-opt').forEach(b => b.classList.remove('active'));
+        document.querySelector('.koState-opt[data-val="prekilled"]').classList.add('active');
         document.getElementById('feed-comment').value = '';
         state.feedContext = 'mass';
         showModal('modal-feed');
@@ -1167,12 +1197,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.5.10';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.6.0';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -1195,6 +1225,12 @@
             if (log.timestamp === undefined) log.timestamp = Date.now();
             if (log.comment === undefined) log.comment = ''; // v1.5.7: свободный комментарий к записи кормления
             if (log.forced === undefined) log.forced = false; // v1.5.8: принудительное кормление
+            // v1.6.0: состояние КО (живой/предубит/разморозка) и утилизация. Раньше умерщвление КО подразумевалось
+            // всегда независимо от исхода — поэтому старые записи по умолчанию считаем "предубит", это сохраняет
+            // прежнее поведение статистики расхода без изменений задним числом.
+            if (log.koState === undefined) log.koState = 'prekilled';
+            if (log.utilized === undefined) log.utilized = (log.status === 'Оставлен на ночь') ? null : true;
+            if (log.resolvedAt === undefined) log.resolvedAt = null;
         });
         if (!animal.shed_logs) animal.shed_logs = [];
         animal.shed_logs.forEach(log => {
@@ -1617,8 +1653,8 @@
             if(a.feed_logs && a.feed_logs.length > 0) {
                 let lastFeed = getLatestFeedLog(a);
                 const wasFed = (lastFeed.status === 'Съедено' || lastFeed.status === 'Частично') && lastFeed.eatenCount > 0;
-                if(wasFed && (nowMs - Number(lastFeed.timestamp) < limitMs)) {
-                    let leftHrs = Math.ceil((limitMs - (nowMs - Number(lastFeed.timestamp))) / (60 * 60 * 1000));
+                if(wasFed && (nowMs - getFeedEffectiveTime(lastFeed) < limitMs)) {
+                    let leftHrs = Math.ceil((limitMs - (nowMs - getFeedEffectiveTime(lastFeed))) / (60 * 60 * 1000));
                     statusTagHtml = `<span class="status-tag fed">Сыт: осталось ${leftHrs} ч.</span>`;
                 }
             }
@@ -1627,17 +1663,34 @@
             let nightResolveHtml = '';
             (a.feed_logs || []).forEach((log, logIdx) => {
                 if (log.status !== 'Оставлен на ночь') return;
+                const aliveQuestionId = `night-alive-wrap-${idx}-${logIdx}`;
+                const aliveOptClass = `night-alive-opt-${idx}-${logIdx}`;
+                // Вопрос "жив/погиб" нужен только для живого КО и только если съедено = 0 (тронутый/съеденный КО
+                // в любом случае утилизирован — см. resolveNightFeedCore).
+                const aliveQuestionHtml = log.koState === 'live' ? `
+                        <div id="${aliveQuestionId}" style="display:none; margin-top:6px;">
+                            <label style="font-size:0.72rem; color:var(--gold);">КО сейчас:</label>
+                            <div style="display:flex; gap:6px; margin-top:4px;">
+                                <button type="button" class="btn-opt ${aliveOptClass} active" data-val="alive" onclick="selectOpt(this, '${aliveOptClass}')" style="padding:6px 10px; font-size:0.72rem;">Жив</button>
+                                <button type="button" class="btn-opt ${aliveOptClass}" data-val="dead" onclick="selectOpt(this, '${aliveOptClass}')" style="padding:6px 10px; font-size:0.72rem;">Погиб</button>
+                            </div>
+                        </div>` : '';
+                const aliveToggleJs = log.koState === 'live'
+                    ? `document.getElementById('${aliveQuestionId}').style.display = (parseInt(this.value)||0) === 0 ? 'block' : 'none';`
+                    : '';
                 nightResolveHtml += `
                     <div class="night-resolve-box">
-                        <strong style="color:var(--gold); font-size:0.78rem;">⚠️ Оставлено на ночь: ${FEED_TYPE_LABELS[log.type]} [№${log.sizeNum}] ${log.sizeTitle} — ${log.count} шт.</strong>
+                        <strong style="color:var(--gold); font-size:0.78rem;">⚠️ Оставлено на ночь: ${FEED_TYPE_LABELS[log.type]} [№${log.sizeNum}] ${log.sizeTitle} — ${log.count} шт. <span style="color:#aaa; font-weight:normal;">(${KO_STATE_LABELS[log.koState] || log.koState})</span></strong>
+                        <div style="font-size:0.65rem; color:#888;">Предложено: ${formatLogDateTime(log.timestamp, log.date)}</div>
                         <div style="display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap;">
                             <label style="font-size:0.75rem;">Съедено:</label>
-                            <input type="number" id="night-eaten-${idx}-${logIdx}" min="0" max="${log.count}" value="${log.count}" style="width:60px;" oninput="document.getElementById('night-reason-wrap-${idx}-${logIdx}').style.display = (parseInt(this.value)||0) < ${log.count} ? 'block' : 'none';">
+                            <input type="number" id="night-eaten-${idx}-${logIdx}" min="0" max="${log.count}" value="${log.count}" style="width:60px;" oninput="document.getElementById('night-reason-wrap-${idx}-${logIdx}').style.display = (parseInt(this.value)||0) < ${log.count} ? 'block' : 'none'; ${aliveToggleJs}">
                             <span style="font-size:0.75rem;">из ${log.count}</span>
                         </div>
                         <div id="night-reason-wrap-${idx}-${logIdx}" style="display:none; margin-top:6px;">
                             <input type="text" id="night-reason-${idx}-${logIdx}" placeholder="Причина отказа/недоедания (необязательно)" style="width:100%; box-sizing:border-box;">
                         </div>
+                        ${aliveQuestionHtml}
                         <input type="text" id="night-comment-${idx}-${logIdx}" placeholder="Комментарий (необязательно)" style="width:100%; box-sizing:border-box; margin-top:6px;">
                         <button class="btn-main" style="background:var(--green); padding:6px; margin-top:6px; margin-bottom:0; font-size:0.75rem;" onclick="resolveNightFeedForAnimal(${idx}, ${logIdx})">✔ Зафиксировать результат</button>
                     </div>`;
@@ -1929,6 +1982,8 @@
         document.getElementById('feed-type').value = 'RATS'; renderFeedSizes();
         document.querySelectorAll('.feed-method-opt').forEach(b => b.classList.remove('active'));
         document.querySelector('.feed-method-opt[data-val="normal"]').classList.add('active');
+        document.querySelectorAll('.koState-opt').forEach(b => b.classList.remove('active'));
+        document.querySelector('.koState-opt[data-val="prekilled"]').classList.add('active');
         document.getElementById('feed-comment').value = '';
         document.getElementById('modal-bulk-feed-select').style.display = 'none';
         state.feedContext = 'single';
@@ -1944,7 +1999,7 @@
 
     // Применяет одну и ту же запись кормления к списку целей [{animal}] — используется и для одиночного,
     // и для массового кормления (v1.5.8), чтобы логика создания записи не дублировалась в двух местах.
-    function applyFeedingRecord(animals, { type, sizeNum, sizeTitle, weightUnit, count, isNight, isForced, comment }) {
+    function applyFeedingRecord(animals, { type, sizeNum, sizeTitle, weightUnit, count, isNight, isForced, comment, koState }) {
         animals.forEach(animal => {
             if (!animal.feed_logs) animal.feed_logs = [];
             animal.feed_logs.push({
@@ -1952,12 +2007,18 @@
                 date: new Date().toISOString().slice(0, 10),
                 type, sizeNum, sizeTitle, weightUnit, count,
                 // eatenCount: сколько реально съедено. При немедленном/принудительном кормлении считаем съеденным сразу всё;
-                // частичное поедание фиксируется только для варианта "оставлен на ночь" — через resolveNightFeedForAnimal().
+                // частичное поедание фиксируется только для варианта "оставлен на ночь" — через resolveNightFeedCore().
                 eatenCount: isNight ? null : count,
                 refusalReason: '',
                 comment: comment,
                 forced: !!isForced,
-                status: isNight ? 'Оставлен на ночь' : 'Съедено'
+                status: isNight ? 'Оставлен на ночь' : 'Съедено',
+                // v1.6.0: состояние КО на момент подачи — влияет на утилизацию, если оставлен на ночь и не тронут.
+                koState: koState || 'prekilled',
+                // utilized: списан ли КО в расход. При немедленном кормлении исход уже известен (КО потрачен сейчас же).
+                // При "оставлен на ночь" исход неизвестен до утренней проверки — remains null до resolveNightFeedCore().
+                utilized: isNight ? null : true,
+                resolvedAt: null // момент утренней фиксации результата (заполняется в resolveNightFeedCore, timestamp больше не перезаписывается)
             });
         });
     }
@@ -1967,12 +2028,13 @@
         const sizeNum = parseInt(document.getElementById('feed-size').value);
         const count = parseInt(document.getElementById('feed-count').value) || 1;
         const method = document.querySelector('.feed-method-opt.active')?.dataset.val || 'normal';
+        const koState = document.querySelector('.koState-opt.active')?.dataset.val || 'prekilled';
         const comment = document.getElementById('feed-comment').value.trim();
         let source = type === 'RATS' ? RATS : type === 'MICE' ? MICE : RABBITS;
         let item = source.find(i => i.n === sizeNum);
         return {
             type, sizeNum, sizeTitle: item.t, weightUnit: item.w, count,
-            isNight: method === 'night', isForced: method === 'forced', comment
+            isNight: method === 'night', isForced: method === 'forced', comment, koState
         };
     }
 
@@ -1994,8 +2056,44 @@
     }
 
     // Разрешение статуса "оставлен на ночь" — теперь по каждой особи отдельно (v1.5.1).
-    // eatenCount может быть меньше count (частичное поедание); count всегда остаётся как есть —
-    // это расход/утилизация КО, которые умерщвляются заранее независимо от того, съедены они или нет.
+    // eatenCount может быть меньше count (частичное поедание); count всегда остаётся как есть — это то, СКОЛЬКО
+    // БЫЛО ПРЕДЛОЖЕНО (расход подсчитывается отдельно через utilized, см. ниже).
+    //
+    // v1.6.0: единая логика разрешения "оставлен на ночь" — вынесена в отдельную функцию (resolveNightFeedCore),
+    // потому что теперь есть два места, откуда она вызывается: карточка одного животного (resolveNightFeedForAnimal)
+    // и массовая утренняя проверка по стеллажу (resolveMorningCheckItem/applyMorningCheckBulk) — логика утилизации
+    // КО не должна дублироваться в двух местах и незаметно разъезжаться между ними.
+    //
+    // Утилизация КО: предубит/разморозка — утилизируется всегда, независимо от исхода (как и раньше).
+    // Живой — утилизируется, если съеден (полностью или частично), либо если не тронут, но погиб за ночь.
+    // Живой и не тронутый, переживший ночь — НЕ утилизируется: не идёт в расход, можно использовать повторно
+    // для другого кормления обычной новой записью (без отдельного трекинга самого объекта КО).
+    function resolveNightFeedCore(locId, blockId, cellIdx, animalIdx, logIdx, { eaten, refusalReason, comment, aliveAfter }) {
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        if (!block) return false;
+        const cell = getBlockCells(block)[cellIdx];
+        const animal = cell && cell.animals[animalIdx];
+        const log = animal && animal.feed_logs[logIdx];
+        if (!log) return false;
+
+        if (isNaN(eaten) || eaten < 0) eaten = 0;
+        if (eaten > log.count) eaten = log.count;
+
+        log.eatenCount = eaten;
+        log.status = eaten >= log.count ? 'Съедено' : (eaten === 0 ? 'Отказ' : 'Частично');
+        log.refusalReason = eaten < log.count ? (refusalReason || '') : '';
+        // v1.6.0: timestamp — момент, когда КО был предложен — больше НЕ перезаписывается. Момент фиксации результата
+        // (от него по-прежнему считается срок "маркера сытости", см. getFeedEffectiveTime) — отдельное поле resolvedAt.
+        log.resolvedAt = Date.now();
+        if (comment) log.comment = comment;
+
+        if (log.koState !== 'live') log.utilized = true; // предубит/разморозка — всегда утилизирован
+        else if (eaten > 0) log.utilized = true; // живой, но тронутый/съеденный — утилизирован
+        else log.utilized = !aliveAfter; // живой и не тронутый: утилизирован, только если погиб
+
+        return true;
+    }
+
     function resolveNightFeedForAnimal(animalIdx, logIdx) {
         const cell = getCell(state.locId, state.blockId, state.cellIdx);
         const animal = cell.animals[animalIdx];
@@ -2005,23 +2103,172 @@
         const input = document.getElementById(`night-eaten-${animalIdx}-${logIdx}`);
         let eaten = input ? parseInt(input.value) : log.count;
         if (isNaN(eaten) || eaten < 0) eaten = 0;
-        if (eaten > log.count) eaten = log.count;
 
-        log.eatenCount = eaten;
-        log.status = eaten >= log.count ? 'Съедено' : (eaten === 0 ? 'Отказ' : 'Частично');
-        if (eaten < log.count) {
-            const reasonInput = document.getElementById(`night-reason-${animalIdx}-${logIdx}`);
-            log.refusalReason = reasonInput ? reasonInput.value.trim() : '';
-        } else {
-            log.refusalReason = '';
+        let aliveAfter = true; // не используется, если условие ниже не выполняется
+        if (log.koState === 'live' && eaten === 0) {
+            const deadBtn = document.querySelector(`.night-alive-opt-${animalIdx}-${logIdx}[data-val="dead"].active`);
+            aliveAfter = !deadBtn;
         }
-        log.timestamp = Date.now(); // момент фиксации результата — от него считается срок "маркера сытости"
 
+        const reasonInput = document.getElementById(`night-reason-${animalIdx}-${logIdx}`);
         const commentInput = document.getElementById(`night-comment-${animalIdx}-${logIdx}`);
-        if (commentInput && commentInput.value.trim()) log.comment = commentInput.value.trim();
+
+        const ok = resolveNightFeedCore(state.locId, state.blockId, state.cellIdx, animalIdx, logIdx, {
+            eaten,
+            refusalReason: reasonInput ? reasonInput.value.trim() : '',
+            comment: commentInput ? commentInput.value.trim() : '',
+            aliveAfter
+        });
+        if (!ok) return;
 
         save();
         openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    // --- Массовая утренняя проверка (v1.6.0) — один стеллаж за раз, по аналогии с массовым кормлением,
+    // но без предварительного выбора ячеек: список сам собирает все записи "оставлено на ночь" в стеллаже,
+    // выбирать/искать их вручную не нужно — они уже точно известны из базы.
+    let morningCheckState = null; // { locId, blockId, items: [{cellIdx, animalIdx, logIdx}] }
+
+    function collectPendingNightItems(locId, blockId) {
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        const cells = getBlockCells(block);
+        const items = [];
+        cells.forEach((cell, cellIdx) => {
+            if (cell.isService) return;
+            (cell.animals || []).forEach((animal, animalIdx) => {
+                (animal.feed_logs || []).forEach((log, logIdx) => {
+                    if (log.status === 'Оставлен на ночь') items.push({ cellIdx, animalIdx, logIdx });
+                });
+            });
+        });
+        return items;
+    }
+
+    function openMorningCheck(locId, blockId) {
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        if (!block) return;
+        morningCheckState = { locId, blockId, items: [] };
+        document.getElementById('mc-block-name').textContent = block.name;
+        renderMorningCheckList();
+        showModal('modal-morning-check');
+    }
+
+    function renderMorningCheckList() {
+        if (!morningCheckState) return;
+        const { locId, blockId } = morningCheckState;
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        const cells = getBlockCells(block);
+        const items = collectPendingNightItems(locId, blockId);
+        morningCheckState.items = items;
+        const container = document.getElementById('morning-check-list');
+
+        if (items.length === 0) {
+            container.innerHTML = `<p style="color:#888; text-align:center; padding:12px 0;">Нет записей "оставлено на ночь" в этом стеллаже.</p>`;
+            return;
+        }
+
+        let html = '';
+        items.forEach((item, i) => {
+            const cell = cells[item.cellIdx];
+            const animal = cell.animals[item.animalIdx];
+            const log = animal.feed_logs[item.logIdx];
+            const pos = locateCellPosition(block, item.cellIdx);
+            const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+            const aliveOptClass = `mc-alive-opt-${i}`;
+
+            html += `
+                <div class="night-resolve-box" style="margin-top:10px;">
+                    <div style="display:flex; align-items:flex-start; gap:8px;">
+                        <input type="checkbox" id="mc-sel-${i}" checked style="margin-top:3px; width:auto;">
+                        <div style="flex:1;">
+                            <strong style="color:var(--gold); font-size:0.78rem;">${address}, ${block.name} — ${animal.species}: ${FEED_TYPE_LABELS[log.type]} [№${log.sizeNum}] ${log.sizeTitle} — ${log.count} шт. <span style="color:#aaa; font-weight:normal;">(${KO_STATE_LABELS[log.koState] || log.koState})</span></strong>
+                            <div style="font-size:0.65rem; color:#888;">Предложено: ${formatLogDateTime(log.timestamp, log.date)}</div>
+                            <div style="display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap;">
+                                <label style="font-size:0.75rem;">Съедено:</label>
+                                <input type="number" id="mc-eaten-${i}" min="0" max="${log.count}" value="${log.count}" style="width:60px;"
+                                    oninput="document.getElementById('mc-reason-wrap-${i}').style.display = (parseInt(this.value)||0) < ${log.count} ? 'block' : 'none';
+                                             ${log.koState === 'live' ? `document.getElementById('mc-alive-wrap-${i}').style.display = (parseInt(this.value)||0) === 0 ? 'block' : 'none';` : ''}">
+                                <span style="font-size:0.75rem;">из ${log.count}</span>
+                            </div>
+                            <div id="mc-reason-wrap-${i}" style="display:none; margin-top:6px;">
+                                <input type="text" id="mc-reason-${i}" placeholder="Причина отказа/недоедания (необязательно)" style="width:100%; box-sizing:border-box;">
+                            </div>
+                            ${log.koState === 'live' ? `
+                            <div id="mc-alive-wrap-${i}" style="display:none; margin-top:6px;">
+                                <label style="font-size:0.72rem; color:var(--gold);">КО сейчас:</label>
+                                <div style="display:flex; gap:6px; margin-top:4px;">
+                                    <button type="button" class="btn-opt ${aliveOptClass} active" data-val="alive" onclick="selectOpt(this, '${aliveOptClass}')" style="padding:6px 10px; font-size:0.72rem;">Жив</button>
+                                    <button type="button" class="btn-opt ${aliveOptClass}" data-val="dead" onclick="selectOpt(this, '${aliveOptClass}')" style="padding:6px 10px; font-size:0.72rem;">Погиб</button>
+                                </div>
+                            </div>` : ''}
+                            <input type="text" id="mc-comment-${i}" placeholder="Комментарий (необязательно)" style="width:100%; box-sizing:border-box; margin-top:6px;">
+                            <button class="btn-main" style="background:var(--green); padding:6px; margin-top:6px; margin-bottom:0; font-size:0.75rem;" onclick="resolveMorningCheckItem(${i})">✔ Зафиксировать результат</button>
+                        </div>
+                    </div>
+                </div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function resolveMorningCheckItem(i) {
+        if (!morningCheckState) return;
+        const item = morningCheckState.items[i];
+        if (!item) return;
+        const { locId, blockId } = morningCheckState;
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        const cell = getBlockCells(block)[item.cellIdx];
+        const animal = cell.animals[item.animalIdx];
+        const log = animal.feed_logs[item.logIdx];
+
+        const eatenInput = document.getElementById(`mc-eaten-${i}`);
+        let eaten = eatenInput ? parseInt(eatenInput.value) : log.count;
+        if (isNaN(eaten) || eaten < 0) eaten = 0;
+
+        let aliveAfter = true;
+        if (log.koState === 'live' && eaten === 0) {
+            const deadBtn = document.querySelector(`.mc-alive-opt-${i}[data-val="dead"].active`);
+            aliveAfter = !deadBtn;
+        }
+
+        const reasonInput = document.getElementById(`mc-reason-${i}`);
+        const commentInput = document.getElementById(`mc-comment-${i}`);
+
+        resolveNightFeedCore(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx, {
+            eaten,
+            refusalReason: reasonInput ? reasonInput.value.trim() : '',
+            comment: commentInput ? commentInput.value.trim() : '',
+            aliveAfter
+        });
+        save();
+        renderMorningCheckList(); // разрешённая запись пропадёт из списка, остальные перестроятся заново
+        render(); // обновить сам стеллаж на фоне (снять индикатор "оставлено на ночь", если это была последняя запись)
+    }
+
+    function applyMorningCheckBulk() {
+        if (!morningCheckState || morningCheckState.items.length === 0) return;
+        const { locId, blockId } = morningCheckState;
+        const selected = morningCheckState.items.filter((item, i) => {
+            const chk = document.getElementById(`mc-sel-${i}`);
+            return chk && chk.checked;
+        });
+        if (selected.length === 0) { alert('Ничего не выбрано.'); return; }
+
+        selected.forEach(item => {
+            // "Съедено полностью" — эквивалент eaten = count. Утилизация в этом случае всегда true
+            // (см. resolveNightFeedCore: съеденный КО утилизирован независимо от состояния), поэтому
+            // вопрос "жив/погиб" здесь не нужен ни при каком состоянии КО.
+            const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+            const log = getBlockCells(block)[item.cellIdx].animals[item.animalIdx].feed_logs[item.logIdx];
+            resolveNightFeedCore(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx, {
+                eaten: log.count, refusalReason: '', comment: '', aliveAfter: true
+            });
+        });
+        save();
+        const count = selected.length;
+        renderMorningCheckList();
+        render();
+        alert(`Отмечено как съедено полностью: ${count}.`);
     }
 
     function openSheddingModal(idx) { state.animalIdx = idx; showModal('modal-shedding'); }
@@ -2238,12 +2485,17 @@ ${bodyHtml}
         (animal.feed_logs || []).slice().reverse().forEach(log => {
             const eaten = (log.eatenCount === null || log.eatenCount === undefined) ? '—' : log.eatenCount;
             const statusText = log.status + (log.forced ? ' (принудительно)' : '');
+            const dateCell = formatLogDateTime(log.timestamp, log.date) + (log.resolvedAt ? `<div style="font-size:0.65rem; color:#888;">подтв.: ${formatLogDateTime(log.resolvedAt)}</div>` : '');
+            const koStateText = KO_STATE_LABELS[log.koState] || log.koState || '—';
+            const utilizedText = log.status === 'Оставлен на ночь' ? 'Ожидает' : (log.utilized ? 'Да' : 'Нет (жив)');
             feedRows += `<tr>
-                <td>${formatLogDateTime(log.timestamp, log.date)}</td>
+                <td>${dateCell}</td>
                 <td>${FEED_TYPE_LABELS[log.type] || log.type} [№${log.sizeNum}] ${log.sizeTitle}</td>
                 <td>${log.count}</td>
                 <td>${eaten}</td>
                 <td>${statusText}</td>
+                <td>${koStateText}</td>
+                <td>${utilizedText}</td>
                 <td>${log.refusalReason || ''}</td>
                 <td>${log.comment || ''}</td>
             </tr>`;
@@ -2259,8 +2511,8 @@ ${bodyHtml}
         return `
             <h3>${animal.species} [${animal.gender}] — ${blockName}, место ${address}</h3>
             <table class="rep-table">
-                <thead><tr><th>Дата/время</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Статус</th><th>Причина отказа</th><th>Комментарий</th></tr></thead>
-                <tbody>${feedRows || '<tr><td colspan="7">Нет записей о кормлении</td></tr>'}</tbody>
+                <thead><tr><th>Дата/время</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Статус</th><th>Состояние КО</th><th>Утилизация</th><th>Причина отказа</th><th>Комментарий</th></tr></thead>
+                <tbody>${feedRows || '<tr><td colspan="9">Нет записей о кормлении</td></tr>'}</tbody>
             </table>
             <table class="rep-table">
                 <thead><tr><th>Дата/время</th><th>Статус линьки</th></tr></thead>
@@ -2325,27 +2577,33 @@ ${bodyHtml}
                         chronoEvents.push({
                             timestamp: Number(log.timestamp) || 0,
                             fallbackDate: log.date,
+                            resolvedAt: log.resolvedAt || null,
                             address, blockName: block.name,
                             species: a.species,
                             typeLabel: FEED_TYPE_LABELS[log.type] || log.type,
                             sizeNum: log.sizeNum, sizeTitle: log.sizeTitle,
                             count: log.count, eaten,
+                            koStateText: KO_STATE_LABELS[log.koState] || log.koState || '—',
+                            utilizedText: log.status === 'Оставлен на ночь' ? 'Ожидает' : (log.utilized ? 'Да' : 'Нет (жив)'),
                             statusText: log.status + (log.forced ? ' (принудительно)' : '')
                         });
 
                         if (log.status === 'Оставлен на ночь') return; // ещё не разрешено — не учитываем в итоговых суммах недели
+                        // v1.6.0: "списано КО" считается по флагу utilized, а не безусловно по count — живой,
+                        // не тронутый и переживший ночь КО в расход не идёт (переиспользуется для другого кормления).
+                        const writtenQty = log.utilized ? log.count : 0;
                         const key = `${a.species}_${log.type}_${log.sizeNum}`;
                         if (!summary[key]) summary[key] = { species: a.species, type: log.type, num: log.sizeNum, title: log.sizeTitle, eaten: 0, written: 0 };
                         summary[key].eaten += eaten;
-                        summary[key].written += log.count;
+                        summary[key].written += writtenQty;
                         totalEatenBiomass += eaten * log.weightUnit;
-                        totalWrittenOffBiomass += log.count * log.weightUnit;
+                        totalWrittenOffBiomass += writtenQty * log.weightUnit;
 
                         if (!typeSummary[log.type]) typeSummary[log.type] = { eaten: 0, written: 0, eatenWeight: 0, writtenWeight: 0 };
                         typeSummary[log.type].eaten += eaten;
-                        typeSummary[log.type].written += log.count;
+                        typeSummary[log.type].written += writtenQty;
                         typeSummary[log.type].eatenWeight += eaten * log.weightUnit;
-                        typeSummary[log.type].writtenWeight += log.count * log.weightUnit;
+                        typeSummary[log.type].writtenWeight += writtenQty * log.weightUnit;
                     });
                 });
             });
@@ -2360,8 +2618,10 @@ ${bodyHtml}
             <tr><td>${s.species}</td><td>${FEED_TYPE_LABELS[s.type] || s.type} [№${s.num}] ${s.title}</td><td>${s.eaten}</td><td>${s.written}</td></tr>`).join('');
 
         chronoEvents.sort((a, b) => b.timestamp - a.timestamp); // самое свежее — сверху, как и в остальных отчётах
-        const chronoRows = chronoEvents.map(e => `
-            <tr><td>${formatLogDateTime(e.timestamp, e.fallbackDate)}</td><td>${e.blockName}, ${e.address}</td><td>${e.species}</td><td>${e.typeLabel} [№${e.sizeNum}] ${e.sizeTitle}</td><td>${e.count}</td><td>${e.eaten === null || e.eaten === undefined ? '—' : e.eaten}</td><td>${e.statusText}</td></tr>`).join('');
+        const chronoRows = chronoEvents.map(e => {
+            const dateCell = formatLogDateTime(e.timestamp, e.fallbackDate) + (e.resolvedAt ? `<div style="font-size:0.65rem; color:#888;">подтв.: ${formatLogDateTime(e.resolvedAt)}</div>` : '');
+            return `<tr><td>${dateCell}</td><td>${e.blockName}, ${e.address}</td><td>${e.species}</td><td>${e.typeLabel} [№${e.sizeNum}] ${e.sizeTitle}</td><td>${e.count}</td><td>${e.eaten === null || e.eaten === undefined ? '—' : e.eaten}</td><td>${e.koStateText}</td><td>${e.utilizedText}</td><td>${e.statusText}</td></tr>`;
+        }).join('');
 
         const bodyHtml = `
             <p>Локация: <b>${loc.name}</b>. Период: последние 7 дней (${new Date(cutoff).toLocaleDateString('ru-RU')} — ${new Date().toLocaleDateString('ru-RU')}).</p>
@@ -2378,8 +2638,8 @@ ${bodyHtml}
             </table>
             <h3>Хронология кормлений за неделю</h3>
             <table class="rep-table">
-                <thead><tr><th>Дата/время</th><th>Место</th><th>Животное</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Статус</th></tr></thead>
-                <tbody>${chronoRows || '<tr><td colspan="7">Нет кормлений за последние 7 дней</td></tr>'}</tbody>
+                <thead><tr><th>Дата/время</th><th>Место</th><th>Животное</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Состояние КО</th><th>Утилизация</th><th>Статус</th></tr></thead>
+                <tbody>${chronoRows || '<tr><td colspan="9">Нет кормлений за последние 7 дней</td></tr>'}</tbody>
             </table>`;
         showReportModal(`Недельный отчёт — ${loc.name}`, bodyHtml, `weekly_report_${loc.name.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.html`);
     }
@@ -2472,6 +2732,8 @@ ${bodyHtml}
             
             loc.blocks.forEach((block, blockIdx) => {
                 const isMassFeedingThisBlock = massFeedState && massFeedState.locId === loc.id && massFeedState.blockId === block.id;
+                const pendingNightCount = getBlockCells(block).reduce((acc, c) => acc + (c.animals || []).reduce((a2, an) =>
+                    a2 + (an.feed_logs || []).filter(l => l.status === 'Оставлен на ночь').length, 0), 0);
                 html += `
                     <div class="block-unit">
                         <div class="block-header">
@@ -2479,6 +2741,7 @@ ${bodyHtml}
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <span class="edit-ui" style="font-size:0.9rem; cursor:pointer; color:#888;" onclick="moveBlock(${loc.id}, ${block.id}, -1)">▲</span>
                                 <span class="edit-ui" style="font-size:0.9rem; cursor:pointer; color:#888;" onclick="moveBlock(${loc.id}, ${block.id}, 1)">▼</span>
+                                ${pendingNightCount > 0 ? `<span style="font-size:0.75rem; cursor:pointer; color:var(--gold);" onclick="openMorningCheck(${loc.id}, ${block.id})">🌙 Проверка (${pendingNightCount})</span>` : ''}
                                 ${isMassFeedingThisBlock
                                     ? `<span style="font-size:0.75rem; cursor:pointer; color:var(--gold);" onclick="cancelMassFeed()">✖ Отменить выбор</span>`
                                     : `<span style="font-size:0.75rem; cursor:pointer; color:var(--purple);" onclick="startMassFeed(${loc.id}, ${block.id})">🍖 Групповое кормление</span>`
@@ -2529,7 +2792,7 @@ ${bodyHtml}
                                 if(!a.feed_logs || a.feed_logs.length === 0) return false;
                                 let lastFeed = getLatestFeedLog(a);
                                 const wasFed = (lastFeed.status === 'Съедено' || lastFeed.status === 'Частично') && lastFeed.eatenCount > 0;
-                                return (wasFed && (nowMs - Number(lastFeed.timestamp) < limitMs));
+                                return (wasFed && (nowMs - getFeedEffectiveTime(lastFeed) < limitMs));
                             });
 
                             if (isSheddingMode) {
