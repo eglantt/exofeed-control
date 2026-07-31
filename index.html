@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.6.0</title>
+    <title>ExoFeed Control v1.7.0</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -246,7 +246,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.6.0-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.7.0-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -1197,12 +1197,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.6.0';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.7.0';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -2447,6 +2447,7 @@
             window.currentTxtReport = txtData;
             html += `<button class="btn-main" style="background:var(--purple); margin-top:15px;" onclick="downloadTxtReport()">📥 Скачать отчёт по видам (.TXT)</button>`;
             html += `<button class="btn-main" style="background:#37474f;" onclick="openWeeklyReport(${locId})">📅 Отчёт за неделю (HTML)</button>`;
+            html += `<button class="btn-main" style="background:#37474f;" onclick="openCalendarWeekReport(${locId})">🗓️ Отчёт за календарную неделю (HTML)</button>`;
             html += `<button class="btn-main" style="background:#37474f;" onclick="openFullLocationReport(${locId})">📚 Полный отчёт по всем животным (HTML)</button>`;
             container.innerHTML = html;
         }
@@ -2511,7 +2512,7 @@ ${bodyHtml}
         return `
             <h3>${animal.species} [${animal.gender}] — ${blockName}, место ${address}</h3>
             <table class="rep-table">
-                <thead><tr><th>Дата/время</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Статус</th><th>Состояние КО</th><th>Утилизация</th><th>Причина отказа</th><th>Комментарий</th></tr></thead>
+                <thead><tr><th>Дата/время</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Статус</th><th>Состояние КО</th><th>Расход КО</th><th>Причина отказа</th><th>Комментарий</th></tr></thead>
                 <tbody>${feedRows || '<tr><td colspan="9">Нет записей о кормлении</td></tr>'}</tbody>
             </table>
             <table class="rep-table">
@@ -2524,10 +2525,13 @@ ${bodyHtml}
             </table>`;
     }
 
-    function showReportModal(title, bodyHtml, filename) {
+    // v1.7.0: необязательный 4-й параметр downloadBodyHtml — для отчётов с интерактивными элементами
+    // (выпадающий список, кнопка копирования), которые не имеют смысла в статичном скачиваемом файле.
+    // Если не передан — используется тот же bodyHtml, что и раньше (никаких изменений для существующих вызовов).
+    function showReportModal(title, bodyHtml, filename, downloadBodyHtml) {
         document.getElementById('report-title-ui').innerText = title;
         document.getElementById('report-preview').innerHTML = bodyHtml;
-        window.currentHtmlReport = wrapReportDocument(title, bodyHtml);
+        window.currentHtmlReport = wrapReportDocument(title, downloadBodyHtml !== undefined ? downloadBodyHtml : bodyHtml);
         window.currentHtmlReportFilename = filename;
         showModal('modal-report');
     }
@@ -2551,15 +2555,35 @@ ${bodyHtml}
         showReportModal(`Отчёт по особи: ${animal.species}`, bodyHtml, `report_${animal.species.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.html`);
     }
 
-    // Агрегированный отчёт за последние 7 дней (скользящее окно) по локации
-    function openWeeklyReport(locId) {
-        const loc = db.find(l => l.id === locId);
-        const weekMs = 7 * 24 * 60 * 60 * 1000;
-        const cutoff = Date.now() - weekMs;
-        let summary = {};
-        let typeSummary = {}; // v1.5.8: сводка по видам КО целиком (Крысы/Мыши/Кролики), без разбивки по размерам
+    // v1.7.0: русские названия видов КО во множественном числе (для заголовков групп) и в родительном падеже
+    // (для строки "Всего X:") — нужны для блока "Итого расход КО" в отчёте за календарную неделю.
+    const TYPE_PLURAL_LABELS = { 'RATS': 'КРЫСЫ', 'MICE': 'МЫШИ', 'RABBITS': 'КРОЛИКИ' };
+    const TYPE_GENITIVE_PLURAL = { 'RATS': 'крыс', 'MICE': 'мышей', 'RABBITS': 'кроликов' };
+
+    function fmtWeight(g) { return g >= 1000 ? (g / 1000).toFixed(2) + ' кг' : g.toFixed(0) + ' г'; }
+
+    // v1.7.0: понедельник 00:00 календарной недели, содержащей момент ts (мс).
+    function getMondayMs(ts) {
+        const d = new Date(ts);
+        d.setHours(0, 0, 0, 0);
+        const day = d.getDay(); // 0=вс..6=сб
+        const diff = (day === 0 ? -6 : 1) - day;
+        d.setDate(d.getDate() + diff);
+        return d.getTime();
+    }
+    function formatDateRu(ts) { return new Date(ts).toLocaleDateString('ru-RU'); }
+
+    // v1.7.0: общий подсчёт по кормлениям локации за произвольный период [startMs, endMs) — используется и старым
+    // отчётом "за последние 7 дней" (скользящее окно, endMs = Infinity — верхней границы не было и не появилось),
+    // и новым отчётом за календарную неделю (границы понедельник 00:00 — следующий понедельник 00:00).
+    // Логика подсчёта — ОДНА на оба отчёта, чтобы правки (как переименование в этой же версии) не расходились
+    // между местами, где раньше это же самое было продублировано.
+    function aggregateFeedingData(loc, startMs, endMs) {
+        let summary = {}; // по виду животного + виду/размеру КО — "кому сколько скормлено"
+        let typeSummary = {}; // по виду КО целиком (Крысы/Мыши/Кролики), без разбивки по размерам
+        let sizeSummary = {}; // v1.7.0: по виду КО + размеру, БЕЗ вида животного — "сколько всего голышей/опушенков и т.д."
         let totalEatenBiomass = 0, totalWrittenOffBiomass = 0;
-        let chronoEvents = []; // v1.5.10: построчная хронология всех кормлений за неделю (с датами и адресами) — раньше отдельные даты в отчёт вообще не попадали, терялись на этапе суммирования
+        let chronoEvents = [];
 
         loc.blocks.forEach(block => {
             getBlockCells(block).forEach((cell, cIdx) => {
@@ -2568,14 +2592,15 @@ ${bodyHtml}
                 const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
                 cell.animals.forEach(a => {
                     (a.feed_logs || []).forEach(log => {
-                        if (Number(log.timestamp) < cutoff) return;
+                        const ts = Number(log.timestamp) || 0;
+                        if (ts < startMs || ts >= endMs) return;
 
                         const eaten = (log.eatenCount !== null && log.eatenCount !== undefined) ? log.eatenCount : (log.status === 'Съедено' ? log.count : 0);
 
                         // Хронология — построчно, включая записи "Оставлен на ночь" (ещё не разрешённые):
                         // это отчёт о том, что физически происходило по датам, а не только об итогах.
                         chronoEvents.push({
-                            timestamp: Number(log.timestamp) || 0,
+                            timestamp: ts,
                             fallbackDate: log.date,
                             resolvedAt: log.resolvedAt || null,
                             address, blockName: block.name,
@@ -2588,10 +2613,11 @@ ${bodyHtml}
                             statusText: log.status + (log.forced ? ' (принудительно)' : '')
                         });
 
-                        if (log.status === 'Оставлен на ночь') return; // ещё не разрешено — не учитываем в итоговых суммах недели
-                        // v1.6.0: "списано КО" считается по флагу utilized, а не безусловно по count — живой,
+                        if (log.status === 'Оставлен на ночь') return; // ещё не разрешено — не учитываем в итоговых суммах периода
+                        // "Расход КО" (было "утилизация") считается по флагу utilized, а не безусловно по count — живой,
                         // не тронутый и переживший ночь КО в расход не идёт (переиспользуется для другого кормления).
                         const writtenQty = log.utilized ? log.count : 0;
+
                         const key = `${a.species}_${log.type}_${log.sizeNum}`;
                         if (!summary[key]) summary[key] = { species: a.species, type: log.type, num: log.sizeNum, title: log.sizeTitle, eaten: 0, written: 0 };
                         summary[key].eaten += eaten;
@@ -2604,45 +2630,194 @@ ${bodyHtml}
                         typeSummary[log.type].written += writtenQty;
                         typeSummary[log.type].eatenWeight += eaten * log.weightUnit;
                         typeSummary[log.type].writtenWeight += writtenQty * log.weightUnit;
+
+                        const sizeKey = `${log.type}_${log.sizeNum}`;
+                        if (!sizeSummary[sizeKey]) sizeSummary[sizeKey] = { type: log.type, num: log.sizeNum, title: log.sizeTitle, written: 0, writtenWeight: 0 };
+                        sizeSummary[sizeKey].written += writtenQty;
+                        sizeSummary[sizeKey].writtenWeight += writtenQty * log.weightUnit;
                     });
                 });
             });
         });
 
-        const fmtWeight = (g) => g >= 1000 ? (g / 1000).toFixed(2) + ' кг' : g.toFixed(0) + ' г';
+        chronoEvents.sort((a, b) => b.timestamp - a.timestamp); // самое свежее — сверху
+        return { summary, typeSummary, sizeSummary, totalEatenBiomass, totalWrittenOffBiomass, chronoEvents };
+    }
 
+    function renderTypeSummaryTable(typeSummary) {
         const typeRows = Object.keys(typeSummary).map(t => `
             <tr><td>${FEED_TYPE_LABELS[t] || t}</td><td>${typeSummary[t].written} шт (${fmtWeight(typeSummary[t].writtenWeight)})</td><td>${typeSummary[t].eaten} шт (${fmtWeight(typeSummary[t].eatenWeight)})</td></tr>`).join('');
-
+        return `<table class="rep-table">
+                <thead><tr><th>Вид КО</th><th>Списано всего (шт, вес)</th><th>Съедено всего (шт, вес)</th></tr></thead>
+                <tbody>${typeRows || '<tr><td colspan="3">Нет кормлений за период</td></tr>'}</tbody>
+            </table>`;
+    }
+    function renderSpeciesSummaryTable(summary) {
         const rows = Object.values(summary).map(s => `
             <tr><td>${s.species}</td><td>${FEED_TYPE_LABELS[s.type] || s.type} [№${s.num}] ${s.title}</td><td>${s.eaten}</td><td>${s.written}</td></tr>`).join('');
-
-        chronoEvents.sort((a, b) => b.timestamp - a.timestamp); // самое свежее — сверху, как и в остальных отчётах
+        return `<table class="rep-table">
+                <thead><tr><th>Вид животного</th><th>Кормовой объект</th><th>Съедено, шт</th><th>Списано КО, шт</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="4">Нет кормлений за период</td></tr>'}</tbody>
+            </table>`;
+    }
+    function renderChronoTable(chronoEvents) {
         const chronoRows = chronoEvents.map(e => {
             const dateCell = formatLogDateTime(e.timestamp, e.fallbackDate) + (e.resolvedAt ? `<div style="font-size:0.65rem; color:#888;">подтв.: ${formatLogDateTime(e.resolvedAt)}</div>` : '');
             return `<tr><td>${dateCell}</td><td>${e.blockName}, ${e.address}</td><td>${e.species}</td><td>${e.typeLabel} [№${e.sizeNum}] ${e.sizeTitle}</td><td>${e.count}</td><td>${e.eaten === null || e.eaten === undefined ? '—' : e.eaten}</td><td>${e.koStateText}</td><td>${e.utilizedText}</td><td>${e.statusText}</td></tr>`;
         }).join('');
+        return `<table class="rep-table">
+                <thead><tr><th>Дата/время</th><th>Место</th><th>Животное</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Состояние КО</th><th>Расход КО</th><th>Статус</th></tr></thead>
+                <tbody>${chronoRows || '<tr><td colspan="9">Нет кормлений за период</td></tr>'}</tbody>
+            </table>`;
+    }
+
+    // Агрегированный отчёт за последние 7 дней (скользящее окно) по локации — v1.7.0: логика подсчёта и
+    // оформление НЕ менялись, только вынесены в общие функции выше (aggregateFeedingData/renderXxxTable),
+    // чтобы не дублировать код с новым отчётом за календарную неделю. Верхней границы периода не было
+    // и не появилось (endMs = Infinity) — сохраняет точно прежнее поведение.
+    function openWeeklyReport(locId) {
+        const loc = db.find(l => l.id === locId);
+        const weekMs = 7 * 24 * 60 * 60 * 1000;
+        const cutoff = Date.now() - weekMs;
+        const data = aggregateFeedingData(loc, cutoff, Infinity);
 
         const bodyHtml = `
             <p>Локация: <b>${loc.name}</b>. Период: последние 7 дней (${new Date(cutoff).toLocaleDateString('ru-RU')} — ${new Date().toLocaleDateString('ru-RU')}).</p>
-            <p>Итого съедено (биомасса питания): <b>${fmtWeight(totalEatenBiomass)}</b> &nbsp;|&nbsp; Итого списано КО (расход/утилизация): <b>${fmtWeight(totalWrittenOffBiomass)}</b></p>
+            <p>Итого съедено (биомасса питания): <b>${fmtWeight(data.totalEatenBiomass)}</b> &nbsp;|&nbsp; Итого списано КО (расход/утилизация): <b>${fmtWeight(data.totalWrittenOffBiomass)}</b></p>
             <h3>Сводка по видам КО за неделю</h3>
-            <table class="rep-table">
-                <thead><tr><th>Вид КО</th><th>Списано всего (шт, вес)</th><th>Съедено всего (шт, вес)</th></tr></thead>
-                <tbody>${typeRows || '<tr><td colspan="3">Нет кормлений за период</td></tr>'}</tbody>
-            </table>
+            ${renderTypeSummaryTable(data.typeSummary)}
             <h3>Детально по видам животных и размерам КО</h3>
-            <table class="rep-table">
-                <thead><tr><th>Вид животного</th><th>Кормовой объект</th><th>Съедено, шт</th><th>Списано КО, шт</th></tr></thead>
-                <tbody>${rows || '<tr><td colspan="4">Нет кормлений за последние 7 дней</td></tr>'}</tbody>
-            </table>
+            ${renderSpeciesSummaryTable(data.summary)}
             <h3>Хронология кормлений за неделю</h3>
-            <table class="rep-table">
-                <thead><tr><th>Дата/время</th><th>Место</th><th>Животное</th><th>Кормовой объект</th><th>Предложено, шт</th><th>Съедено, шт</th><th>Состояние КО</th><th>Утилизация</th><th>Статус</th></tr></thead>
-                <tbody>${chronoRows || '<tr><td colspan="9">Нет кормлений за последние 7 дней</td></tr>'}</tbody>
-            </table>`;
+            ${renderChronoTable(data.chronoEvents)}`;
         showReportModal(`Недельный отчёт — ${loc.name}`, bodyHtml, `weekly_report_${loc.name.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.html`);
     }
+
+    // --- v1.7.0: отчёт за календарную неделю (понедельник — воскресенье), отдельно от отчёта со скользящим
+    // окном выше (тот не менялся). Добавляет блок "Итого расход КО" по видам/размерам КО (без разбивки по
+    // животным) и навигацию по прошлым календарным неделям, у которых есть записи кормления в этой локации.
+    let calendarWeekReportState = null; // { locId, weeks: [{mondayMs, sundayMs}], selectedMonday }
+
+    function collectFeedingWeekOptions(loc) {
+        let earliestTs = Date.now();
+        loc.blocks.forEach(block => {
+            getBlockCells(block).forEach(cell => {
+                (cell.animals || []).forEach(a => {
+                    (a.feed_logs || []).forEach(log => {
+                        const ts = Number(log.timestamp) || 0;
+                        if (ts > 0 && ts < earliestTs) earliestTs = ts;
+                    });
+                });
+            });
+        });
+        const currentMonday = getMondayMs(Date.now());
+        const startMonday = getMondayMs(earliestTs);
+        const weeks = [];
+        for (let m = currentMonday; m >= startMonday; m -= 7 * 24 * 60 * 60 * 1000) {
+            weeks.push({ mondayMs: m, sundayMs: m + 7 * 24 * 60 * 60 * 1000 - 1 });
+        }
+        return weeks; // самая свежая неделя первой
+    }
+
+    function openCalendarWeekReport(locId, mondayMs) {
+        const loc = db.find(l => l.id === locId);
+        const weeks = collectFeedingWeekOptions(loc);
+        const selectedMonday = (mondayMs !== undefined && mondayMs !== null) ? Number(mondayMs) : weeks[0].mondayMs;
+        calendarWeekReportState = { locId, weeks, selectedMonday };
+        renderCalendarWeekReport();
+    }
+
+    function changeCalendarWeekReport(newMondayMsStr) {
+        if (!calendarWeekReportState) return;
+        calendarWeekReportState.selectedMonday = parseInt(newMondayMsStr);
+        renderCalendarWeekReport();
+    }
+
+    function buildKoTotalsText(sizeSummary, mondayMs, sundayMs) {
+        let text = `ИТОГО РАСХОД КО (${formatDateRu(mondayMs)} — ${formatDateRu(sundayMs)}):\n\n`;
+        const byType = {};
+        Object.values(sizeSummary).forEach(s => {
+            if (!byType[s.type]) byType[s.type] = [];
+            byType[s.type].push(s);
+        });
+        // Порядок групп — фиксированный (Крысы/Мыши/Кролики), а не порядок появления в данных, для консистентности между неделями.
+        ['RATS', 'MICE', 'RABBITS'].forEach(type => {
+            if (!byType[type] || byType[type].length === 0) return;
+            const items = byType[type].slice().sort((a, b) => a.num - b.num);
+            text += `${TYPE_PLURAL_LABELS[type] || type}:\n`;
+            let sumCount = 0, sumWeight = 0;
+            items.forEach(it => {
+                text += `${FEED_TYPE_LABELS[it.type] || it.type} №${it.num} ${it.title}: ${it.written} шт\n`;
+                sumCount += it.written;
+                sumWeight += it.writtenWeight;
+            });
+            text += `Всего ${TYPE_GENITIVE_PLURAL[type] || type}: ${sumCount} шт / ${fmtWeight(sumWeight)}\n\n`;
+        });
+        if (text.trim() === 'ИТОГО РАСХОД КО (' + formatDateRu(mondayMs) + ' — ' + formatDateRu(sundayMs) + '):') {
+            text += 'Нет расхода КО за эту неделю.\n';
+        }
+        return text;
+    }
+
+    function renderCalendarWeekReport() {
+        if (!calendarWeekReportState) return;
+        const { locId, weeks, selectedMonday } = calendarWeekReportState;
+        const loc = db.find(l => l.id === locId);
+        const week = weeks.find(w => w.mondayMs === selectedMonday) || weeks[0];
+        const data = aggregateFeedingData(loc, week.mondayMs, week.sundayMs + 1);
+        const totalsText = buildKoTotalsText(data.sizeSummary, week.mondayMs, week.sundayMs);
+
+        const weekSelectHtml = `<select onchange="changeCalendarWeekReport(this.value)" style="background:#252525; color:#fff; border:1px solid #444; border-radius:6px; padding:6px; margin-left:8px;">
+            ${weeks.map(w => `<option value="${w.mondayMs}" ${w.mondayMs === week.mondayMs ? 'selected' : ''}>${formatDateRu(w.mondayMs)} – ${formatDateRu(w.sundayMs)}</option>`).join('')}
+        </select>`;
+
+        const summaryTables = `
+            <h3>Детально по видам животных и размерам КО</h3>
+            ${renderSpeciesSummaryTable(data.summary)}
+            <h3>Хронология кормлений за неделю</h3>
+            ${renderChronoTable(data.chronoEvents)}`;
+
+        // Интерактивная версия (для просмотра в приложении) — с выбором недели и полем для копирования.
+        const interactiveBody = `
+            <p>Локация: <b>${loc.name}</b>. Календарная неделя: ${weekSelectHtml}</p>
+            <h3>Итого расход КО</h3>
+            <textarea id="cw-total-text" readonly style="width:100%; min-height:220px; font-family:monospace; font-size:0.8rem; background:#181818; color:#eee; border:1px solid #444; border-radius:6px; padding:8px; box-sizing:border-box;">${totalsText}</textarea>
+            <button class="btn-main" style="background:var(--purple); margin-top:6px;" onclick="copyCalendarWeekTotals()">📋 Скопировать</button>
+            ${summaryTables}`;
+
+        // Версия для скачиваемого файла — без выпадающего списка и кнопки копирования (они не работают вне приложения),
+        // тот же текст оформлен как статичный блок <pre>.
+        const downloadBody = `
+            <p>Локация: <b>${loc.name}</b>. Календарная неделя: ${formatDateRu(week.mondayMs)} – ${formatDateRu(week.sundayMs)}.</p>
+            <h3>Итого расход КО</h3>
+            <pre style="white-space:pre-wrap; font-family:monospace; background:#f0f0f0; padding:10px; border-radius:6px;">${totalsText}</pre>
+            ${summaryTables}`;
+
+        showReportModal(
+            `Отчёт за календарную неделю — ${loc.name}`,
+            interactiveBody,
+            `calendar_week_report_${loc.name.replace(/\s+/g, '_')}_${formatDateRu(week.mondayMs).replace(/\./g, '-')}.html`,
+            downloadBody
+        );
+    }
+
+    function copyCalendarWeekTotals() {
+        const ta = document.getElementById('cw-total-text');
+        if (!ta) return;
+        const text = ta.value;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => alert('Скопировано в буфер обмена.')).catch(() => {
+                ta.select();
+                document.execCommand('copy');
+                alert('Скопировано в буфер обмена.');
+            });
+        } else {
+            ta.select();
+            document.execCommand('copy');
+            alert('Скопировано в буфер обмена.');
+        }
+    }
+
 
     // Полный отчёт по всем животным локации сразу (вся история кормлений и линек каждой особи)
     function openFullLocationReport(locId) {
