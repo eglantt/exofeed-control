@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.1</title>
+    <title>ExoFeed Control v1.8.2</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -19,7 +19,7 @@
         :root {
             --bg: #121212; --card: #1e1e1e; --text: #e0e0e0;
             --blue: #1565c0; --green: #2e7d32; --red: #c62828; --gold: #ff8f00;
-            --purple: #6a1b9a; --border: #333;
+            --purple: #6a1b9a; --border: #333; --incubator: #00897b;
         }
         body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px 10px 80px; user-select: none; }
         
@@ -57,6 +57,8 @@
         .block-unit { 
             background: #252525; border-radius: 8px; padding: 10px; margin-bottom: 15px; border: 1px solid #333;
         }
+        .block-unit.incubator-block { border: 2px solid var(--incubator); background: #12302c; }
+        body.engineer-mode .block-unit.incubator-block { border: 2px dashed var(--incubator); background: #12302c; }
         .block-header { font-size: 0.9rem; font-weight: bold; color: var(--blue); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
         
         /* Весь стеллаж скроллится как единое целое: колонки (адреса мест) у всех рядов выровнены */
@@ -91,6 +93,7 @@
             transition: transform 0.1s, opacity 0.1s;
         }
         .cell.occupied { border-color: var(--blue); background: #2d2d2d; }
+        .cell.incubator-cell.occupied { border-color: var(--incubator); background: #16332f; }
         
         .cell.fed-mode { background: #1b5e20 !important; border-color: #4caf50 !important; }
         .cell.shedding-mode { border-left: 5px solid #29b6f6 !important; }
@@ -98,6 +101,14 @@
 
         .cell.service-cell { background: repeating-linear-gradient(45deg, #262626, #262626 8px, #2f2f2f 8px, #2f2f2f 16px); border-style: dashed; border-color: #666; cursor: default; }
         .cell.service-cell .cell-info { color: #888; }
+
+        /* v1.8.2: всплывающее напоминание об инкубации */
+        .incubation-banner {
+            display: none; position: fixed; top: 12px; left: 10px; right: 10px; z-index: 2000;
+            background: #12302c; border: 2px solid var(--incubator); border-radius: 10px;
+            padding: 14px 16px; font-size: 0.85rem; font-weight: bold; color: #eafff9;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.5); cursor: pointer; line-height: 1.4;
+        }
 
         body.engineer-mode .cell { touch-action: none; cursor: grab; }
         .cell.dragging { opacity: 0.4; transform: scale(0.95); z-index: 5; }
@@ -239,6 +250,8 @@
 </head>
 <body>
 
+<div id="incubation-reminder-banner" class="incubation-banner" onclick="hideCurrentReminder()"></div>
+
 <div class="header">
     <h3 style="color:var(--blue); margin:0;">ExoFeed Control</h3>
     <div id="lock-status" class="lock-btn locked" onclick="toggleLock()">🔒 РАБОТА</div>
@@ -251,7 +264,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.1-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.2-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -341,9 +354,11 @@
 <div id="modal-clutch" class="modal">
     <div class="modal-content">
         <h4 id="clutch-form-title">Кладка</h4>
-        <div class="form-group"><label>Дата откладки</label><input type="date" id="clutch-lay-date"></div>
+        <div class="form-group"><label>Дата и время закладки</label><input type="datetime-local" id="clutch-lay-datetime"></div>
         <div class="form-group"><label>Количество яиц</label><input type="number" id="clutch-egg-count" min="0"></div>
-        <div class="form-group"><label>Вид / комментарий (текстом, необязательно)</label><input type="text" id="clutch-parent-text" placeholder="Напр: вид, без привязки к записи"></div>
+        <div class="form-group"><label>Вид животного</label><input type="text" id="clutch-species" list="clutch-species-datalist" placeholder="Начните вводить вид..."><datalist id="clutch-species-datalist"></datalist></div>
+        <div class="form-group"><label>Примерный срок инкубации, суток (необязательно)</label><input type="number" id="clutch-estimated-days" min="1"></div>
+        <div class="form-group"><label>Родитель(и) / комментарий текстом (необязательно)</label><input type="text" id="clutch-parent-text" placeholder="Напр: второй родитель неизвестен"></div>
         <div class="form-group">
             <label>Добавить родителя из базы (необязательно, до двух)</label>
             <select id="clutch-parent-select"></select>
@@ -382,6 +397,18 @@
         <p style="font-size:0.85rem; color:#aaa;">Завершённая кладка будет перенесена в архив кладок (по аналогии с архивом животных) и убрана из ячейки.</p>
         <button class="btn-main" onclick="confirmArchiveClutch()">Подтвердить</button>
         <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-block-temp" class="modal">
+    <div class="modal-content">
+        <h4>Температурный режим инкубатора</h4>
+        <p id="block-temp-current" style="font-size:0.85rem; color:#7fb8ff; margin-bottom:12px;"></p>
+        <div class="form-group"><label>Нижний предел, °C</label><input type="number" step="0.1" id="block-temp-min"></div>
+        <div class="form-group"><label>Верхний предел, °C</label><input type="number" step="0.1" id="block-temp-max"></div>
+        <button class="btn-main" onclick="saveBlockTempRange()">Сохранить новый режим</button>
+        <div id="block-temp-history" style="margin-top:12px;"></div>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
     </div>
 </div>
 
@@ -751,6 +778,11 @@
     function toDateStr(d) {
         const pad = (n) => String(n).padStart(2, '0');
         return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+    // v1.8.2: значение по умолчанию для <input type="datetime-local"> (локальное время, без секунд)
+    function toDateTimeLocalStr(d) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
     // Дата+время для отображения в отчётах/журналах (v1.5.4) — ${log.date} без времени раньше
@@ -1259,12 +1291,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.1';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.2';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -1320,10 +1352,16 @@
     // v1.8.0: кладка яиц — отдельная сущность, "жилец" ячейки блока-инкубатора (аналогично animal)
     function normalizeClutch(clutch) {
         if (clutch.id === undefined) clutch.id = Date.now() + Math.random();
-        if (clutch.layDate === undefined) clutch.layDate = '';
+        // v1.8.2: дата+время закладки вместо только даты; старые кладки (только layDate) получают время 00:00
+        if (clutch.layDateTime === undefined) {
+            clutch.layDateTime = clutch.layDate ? `${clutch.layDate}T00:00` : '';
+        }
+        delete clutch.layDate;
         if (clutch.eggCount === undefined) clutch.eggCount = 0;
         if (clutch.hatchedCount === undefined) clutch.hatchedCount = 0;
         if (clutch.status === undefined) clutch.status = 'incubating';
+        if (clutch.species === undefined) clutch.species = ''; // v1.8.2: вид животного с автоподсказкой
+        if (clutch.estimatedDays === undefined || clutch.estimatedDays === '') clutch.estimatedDays = null; // v1.8.2: примерный срок инкубации, суток
         if (clutch.parentText === undefined) clutch.parentText = '';
         if (!Array.isArray(clutch.parentRefs)) clutch.parentRefs = []; // снимок родителя(ей) на момент привязки — не живая ссылка (в базе нет стабильных ID животных)
         if (!Array.isArray(clutch.paramLog)) clutch.paramLog = []; // журнал температуры+влажности, отдельный от tempLog ячейки
@@ -1345,6 +1383,7 @@
         return cell;
     }
     function migrateBlock(block) {
+        if (!Array.isArray(block.targetTempLog)) block.targetTempLog = []; // v1.8.2: журнал целевого температурного режима (актуален для блока-инкубатора)
         if (Array.isArray(block.rows)) {
             // уже новая иерархия rows[i].cells[j] — просто донормализуем поля ячеек (на случай данных из промежуточной версии)
             block.rows.forEach(row => { (row.cells || []).forEach(normalizeCell); });
@@ -1557,10 +1596,56 @@
             loc.blocks.push({
                 id: Date.now(), name: document.getElementById('block-name').value || "Без названия",
                 type: document.getElementById('block-type').value,
-                rows: rowsArr
+                rows: rowsArr, targetTempLog: []
             });
         }
         save(); closeModals();
+    }
+
+    // --- v1.8.2: целевой температурный режим блока-инкубатора (журнал с гистерезисом, не разовое поле) ---
+    function openBlockTempModal(locId, blockId) {
+        state.locId = locId; state.blockId = blockId;
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        document.getElementById('block-temp-min').value = '';
+        document.getElementById('block-temp-max').value = '';
+        renderBlockTempModal(block);
+        showModal('modal-block-temp');
+    }
+    function renderBlockTempModal(block) {
+        const current = block.targetTempLog.length > 0 ? block.targetTempLog[block.targetTempLog.length - 1] : null;
+        const avgText = current ? formatTemp((current.tempMin + current.tempMax) / 2) : '';
+        document.getElementById('block-temp-current').innerHTML = current
+            ? `Текущий режим: <b>${formatTemp(current.tempMin)} … ${formatTemp(current.tempMax)}</b> (сред. ${avgText}) — с ${formatLogDateTime(current.timestamp)}`
+            : 'Режим ещё не задан.';
+        const hist = document.getElementById('block-temp-history');
+        if (block.targetTempLog.length === 0) { hist.innerHTML = ''; return; }
+        hist.innerHTML = `<div class="history-box">` + block.targetTempLog.slice().reverse().map((r, lIdx) => {
+            const realIdx = block.targetTempLog.length - 1 - lIdx;
+            return `<div class="log-row">
+                <span>${formatLogDateTime(r.timestamp)} — <b>${formatTemp(r.tempMin)} … ${formatTemp(r.tempMax)}</b></span>
+                <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteBlockTempLog(${realIdx})">✖</button>
+            </div>`;
+        }).join('') + `</div>`;
+    }
+    function saveBlockTempRange() {
+        const block = db.find(l => l.id === state.locId).blocks.find(b => b.id === state.blockId);
+        const tempMin = parseFloat(document.getElementById('block-temp-min').value);
+        const tempMax = parseFloat(document.getElementById('block-temp-max').value);
+        if (isNaN(tempMin) || isNaN(tempMax)) { alert('Укажите нижний и верхний предел температуры.'); return; }
+        if (tempMin > tempMax) { alert('Нижний предел не может быть больше верхнего.'); return; }
+        block.targetTempLog.push({ timestamp: Date.now(), tempMin, tempMax });
+        save();
+        document.getElementById('block-temp-min').value = '';
+        document.getElementById('block-temp-max').value = '';
+        renderBlockTempModal(block);
+        render();
+    }
+    function deleteBlockTempLog(idx) {
+        const block = db.find(l => l.id === state.locId).blocks.find(b => b.id === state.blockId);
+        block.targetTempLog.splice(idx, 1);
+        save();
+        renderBlockTempModal(block);
+        render();
     }
 
     // --- УПРАВЛЕНИЕ РЯДАМИ (ПОЛКАМИ) И ЯЧЕЙКАМИ В ИНЖЕНЕРНОМ РЕЖИМЕ ---
@@ -1891,6 +1976,25 @@
         if (c.parentText) parts.push(c.parentText);
         return parts.join('; ');
     }
+    // v1.8.2: лучший доступный вид животного для кладки — явное поле, иначе первый привязанный родитель, иначе заглушка
+    function clutchSpeciesLabel(c) {
+        if (c.species) return c.species;
+        if (c.parentRefs && c.parentRefs[0] && c.parentRefs[0].species) return c.parentRefs[0].species;
+        return 'вид не указан';
+    }
+    function clutchDaysElapsed(c) {
+        if (!c.layDateTime) return null;
+        const laid = new Date(c.layDateTime).getTime();
+        if (isNaN(laid)) return null;
+        return Math.floor((Date.now() - laid) / 86400000);
+    }
+    function formatClutchLayDateTime(c) {
+        if (!c.layDateTime) return '—';
+        const d = new Date(c.layDateTime);
+        if (isNaN(d.getTime())) return '—';
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
 
     function renderClutches(cell) {
         const list = document.getElementById('clutches-list');
@@ -1917,13 +2021,20 @@
                 paramHistoryHtml += `</div>`;
             }
             const canFinish = c.status === 'incubating' || c.status === 'partially_hatched';
+            const daysElapsed = clutchDaysElapsed(c);
+            let progressText = '';
+            if (c.estimatedDays) {
+                progressText = `<div style="font-size:0.78rem; color:#7fd6c8; margin-bottom:4px;">⏳ ${daysElapsed !== null ? daysElapsed : '?'}/${c.estimatedDays} суток</div>`;
+            }
             list.innerHTML += `
                 <div class="animal-item">
                     <div style="font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
-                        <span>🥚 Кладка от ${c.layDate || '—'}</span>
+                        <span>🥚 ${clutchSpeciesLabel(c)}</span>
                         <span class="status-tag" style="background:${statusColor};">${CLUTCH_STATUS_LABELS[c.status] || c.status}</span>
                     </div>
+                    <div style="font-size:0.78rem; color:#999; margin-bottom:2px;">Заложена: ${formatClutchLayDateTime(c)}</div>
                     <div style="font-size:0.8rem; color:#aaa; margin-bottom: 4px;">Яиц: ${c.eggCount} · Вылупилось: ${c.hatchedCount}</div>
+                    ${progressText}
                     ${parentsText ? `<div style="font-size:0.78rem; color:#999; margin-bottom:6px;">${parentsText}</div>` : ''}
                     <div style="font-size:0.78rem; color:#7fb8ff; margin-bottom:6px;">🌡💧 ${latestParamText}</div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
@@ -1992,15 +2103,33 @@
         renderClutchParentRefsList();
     }
 
+    // v1.8.2: автоподсказка вида для формы кладки — список уникальных видов, уже встречающихся в базе животных
+    function renderClutchSpeciesDatalist() {
+        const dl = document.getElementById('clutch-species-datalist');
+        const species = new Set();
+        db.forEach(loc => (loc.blocks || []).forEach(block => (block.rows || []).forEach(row => (row.cells || []).forEach(cell => {
+            (cell.animals || []).forEach(a => { if (a.species) species.add(a.species); });
+        }))));
+        dl.innerHTML = '';
+        Array.from(species).sort().forEach(sp => {
+            const opt = document.createElement('option');
+            opt.value = sp;
+            dl.appendChild(opt);
+        });
+    }
+
     function openClutchForm(idx) {
         state.clutchIdx = (idx === null || idx === undefined) ? null : idx;
         const cell = getCell(state.locId, state.blockId, state.cellIdx);
         const c = (state.clutchIdx !== null) ? cell.clutches[state.clutchIdx] : null;
         document.getElementById('clutch-form-title').textContent = c ? 'Правка кладки' : 'Новая кладка';
-        document.getElementById('clutch-lay-date').value = c ? (c.layDate || '') : toDateStr(new Date());
+        document.getElementById('clutch-lay-datetime').value = c ? (c.layDateTime || '') : toDateTimeLocalStr(new Date());
         document.getElementById('clutch-egg-count').value = c ? c.eggCount : '';
+        document.getElementById('clutch-species').value = c ? (c.species || '') : '';
+        document.getElementById('clutch-estimated-days').value = c && c.estimatedDays ? c.estimatedDays : '';
         document.getElementById('clutch-parent-text').value = c ? (c.parentText || '') : '';
         clutchFormParentRefs = c ? JSON.parse(JSON.stringify(c.parentRefs || [])) : [];
+        renderClutchSpeciesDatalist();
         renderClutchParentOptions();
         renderClutchParentRefsList();
         showModal('modal-clutch');
@@ -2008,16 +2137,20 @@
 
     function saveClutch() {
         const cell = getCell(state.locId, state.blockId, state.cellIdx);
-        const layDate = document.getElementById('clutch-lay-date').value;
+        const layDateTime = document.getElementById('clutch-lay-datetime').value;
         const eggCount = parseInt(document.getElementById('clutch-egg-count').value) || 0;
+        const species = document.getElementById('clutch-species').value.trim();
+        const estimatedDaysRaw = document.getElementById('clutch-estimated-days').value;
+        const estimatedDays = estimatedDaysRaw === '' ? null : (parseInt(estimatedDaysRaw) || null);
         const parentText = document.getElementById('clutch-parent-text').value.trim();
         const parentRefs = JSON.parse(JSON.stringify(clutchFormParentRefs));
         if (state.clutchIdx !== null && state.clutchIdx !== undefined) {
             const c = cell.clutches[state.clutchIdx];
-            c.layDate = layDate; c.eggCount = eggCount; c.parentText = parentText; c.parentRefs = parentRefs;
+            c.layDateTime = layDateTime; c.eggCount = eggCount; c.species = species; c.estimatedDays = estimatedDays;
+            c.parentText = parentText; c.parentRefs = parentRefs;
         } else {
             cell.clutches.push(normalizeClutch({
-                id: Date.now() + Math.random(), layDate, eggCount, parentText, parentRefs,
+                id: Date.now() + Math.random(), layDateTime, eggCount, species, estimatedDays, parentText, parentRefs,
                 status: 'incubating', hatchedCount: 0, paramLog: [], createdAt: Date.now()
             }));
         }
@@ -2116,22 +2249,28 @@
         const sumHatchedFinished = finished.reduce((s, r) => s + (r.c.hatchedCount || 0), 0);
         const hatchRateText = sumEggsFinished > 0 ? `${((sumHatchedFinished / sumEggsFinished) * 100).toFixed(1)}%` : '—';
 
-        const tableRows = rows.slice().sort((a, b) => (b.c.layDate || '').localeCompare(a.c.layDate || '')).map(r => `
+        const tableRows = rows.slice().sort((a, b) => (b.c.layDateTime || '').localeCompare(a.c.layDateTime || '')).map(r => {
+            const daysElapsed = clutchDaysElapsed(r.c);
+            const progress = r.c.estimatedDays ? `${daysElapsed !== null ? daysElapsed : '?'}/${r.c.estimatedDays}` : '—';
+            return `
             <tr>
-                <td>${r.c.layDate || '—'}</td>
+                <td>${clutchSpeciesLabel(r.c)}</td>
+                <td>${formatClutchLayDateTime(r.c)}</td>
                 <td>${r.loc} / ${r.block} / ${r.address}${r.archived ? ' <i>(архив)</i>' : ''}</td>
                 <td>${r.c.eggCount}</td>
                 <td>${r.c.hatchedCount}</td>
+                <td>${progress}</td>
                 <td>${CLUTCH_STATUS_LABELS[r.c.status] || r.c.status}</td>
                 <td>${clutchParentsLabel(r.c) || '—'}</td>
-            </tr>`).join('');
+            </tr>`;
+        }).join('');
 
         const bodyHtml = `
             <p><b>Активных кладок:</b> ${rows.filter(r => !r.archived).length} &nbsp; <b>В архиве:</b> ${rows.filter(r => r.archived).length}</p>
             <p><b>Вылупляемость по завершённым кладкам:</b> ${hatchRateText} (${sumHatchedFinished} из ${sumEggsFinished} яиц)</p>
             <table class="rep-table">
-                <thead><tr><th>Дата откладки</th><th>Место</th><th>Яиц</th><th>Вылупилось</th><th>Статус</th><th>Родители</th></tr></thead>
-                <tbody>${tableRows || '<tr><td colspan="6">Кладок нет</td></tr>'}</tbody>
+                <thead><tr><th>Вид</th><th>Заложена</th><th>Место</th><th>Яиц</th><th>Вылупилось</th><th>Суток</th><th>Статус</th><th>Родители</th></tr></thead>
+                <tbody>${tableRows || '<tr><td colspan="8">Кладок нет</td></tr>'}</tbody>
             </table>`;
         showReportModal('Отчёт по инкубации', bodyHtml, `report_incubation_${new Date().toISOString().slice(0, 10)}.html`);
     }
@@ -3258,13 +3397,16 @@ ${bodyHtml}
                 const isMassFeedingThisBlock = massFeedState && massFeedState.locId === loc.id && massFeedState.blockId === block.id;
                 const pendingNightCount = isIncubatorBlock ? 0 : getBlockCells(block).reduce((acc, c) => acc + (c.animals || []).reduce((a2, an) =>
                     a2 + (an.feed_logs || []).filter(l => l.status === 'Оставлен на ночь').length, 0), 0);
+                const currentTempRange = isIncubatorBlock && block.targetTempLog && block.targetTempLog.length > 0
+                    ? block.targetTempLog[block.targetTempLog.length - 1] : null;
                 html += `
-                    <div class="block-unit">
+                    <div class="block-unit${isIncubatorBlock ? ' incubator-block' : ''}">
                         <div class="block-header">
                             <span onclick="isLocked ? null : openBlockModal(${loc.id}, ${block.id})">${block.name} <span style="font-size:0.75rem; color:#777;">[${block.type}]</span></span>
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <span class="edit-ui" style="font-size:0.9rem; cursor:pointer; color:#888;" onclick="moveBlock(${loc.id}, ${block.id}, -1)">▲</span>
                                 <span class="edit-ui" style="font-size:0.9rem; cursor:pointer; color:#888;" onclick="moveBlock(${loc.id}, ${block.id}, 1)">▼</span>
+                                ${isIncubatorBlock ? `<span style="font-size:0.75rem; cursor:pointer; color:var(--incubator);" onclick="openBlockTempModal(${loc.id}, ${block.id})">🌡 ${currentTempRange ? `${formatTemp(currentTempRange.tempMin)}…${formatTemp(currentTempRange.tempMax)}` : 'Режим не задан'}</span>` : ''}
                                 ${pendingNightCount > 0 ? `<span style="font-size:0.75rem; cursor:pointer; color:var(--gold);" onclick="openMorningCheck(${loc.id}, ${block.id})">🌙 Проверка (${pendingNightCount})</span>` : ''}
                                 ${isIncubatorBlock ? '' : (isMassFeedingThisBlock
                                     ? `<span style="font-size:0.75rem; cursor:pointer; color:var(--gold);" onclick="cancelMassFeed()">✖ Отменить выбор</span>`
@@ -3309,7 +3451,8 @@ ${bodyHtml}
                         let sheddingDaysText = '';
 
                         if (hasClutches) {
-                            displayTitle = `🥚 ${cell.clutches.length} ${pluralizeRu(cell.clutches.length, 'кладка', 'кладки', 'кладок')}`;
+                            const firstLabel = clutchSpeciesLabel(cell.clutches[0]);
+                            displayTitle = `Кладка, ${firstLabel}${cell.clutches.length > 1 ? ` +${cell.clutches.length - 1}` : ''}`;
                         }
                         if(hasAnimals) {
                             displayTitle = cell.animals[0].species.split(' (')[0];
@@ -3331,6 +3474,7 @@ ${bodyHtml}
                         }
 
                         let modeClass = (hasAnimals || hasClutches) ? 'occupied' : '';
+                        if (isIncubatorBlock) modeClass += ' incubator-cell';
                         let previewStyle = '';
 
                         if (isPreviewingThisLoc) {
@@ -3644,7 +3788,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.1', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.2', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
@@ -3753,6 +3897,65 @@ ${bodyHtml}
     initModalCloseButtons();
 
     render();
+
+    // ==================== НАПОМИНАНИЯ ОБ ИНКУБАЦИИ (v1.8.2) ====================
+    // Ключ ПОСТОЯННЫЙ (не завязан на версию БД) — хранит, для какой кладки в какой день уже показывали напоминание.
+    const INCUBATION_REMINDER_KEY = 'exofeed_incubation_reminders_shown';
+    let reminderShownMap = {};
+    try {
+        const storedReminders = JSON.parse(localStorage.getItem(INCUBATION_REMINDER_KEY) || '{}');
+        if (storedReminders && typeof storedReminders === 'object') reminderShownMap = storedReminders;
+    } catch (e) { reminderShownMap = {}; }
+    function saveReminderShownMap() { localStorage.setItem(INCUBATION_REMINDER_KEY, JSON.stringify(reminderShownMap)); }
+    function todayStr() { return toDateStr(new Date()); }
+
+    function collectIncubationReminders() {
+        const today = todayStr();
+        let list = [];
+        db.forEach(loc => (loc.blocks || []).forEach(block => {
+            if (block.type !== INCUBATOR_BLOCK_TYPE) return;
+            (block.rows || []).forEach(row => (row.cells || []).forEach(cell => {
+                (cell.clutches || []).forEach(c => {
+                    if (c.status !== 'incubating' && c.status !== 'partially_hatched') return;
+                    if (!c.estimatedDays || !c.layDateTime) return;
+                    if (reminderShownMap[c.id] === today) return;
+                    const daysElapsed = clutchDaysElapsed(c);
+                    if (daysElapsed === null || daysElapsed < c.estimatedDays - 7) return;
+                    list.push({
+                        clutchId: c.id, species: clutchSpeciesLabel(c), blockName: block.name,
+                        daysElapsed, estimatedDays: c.estimatedDays, overdue: daysElapsed >= c.estimatedDays
+                    });
+                });
+            }));
+        }));
+        return list;
+    }
+
+    let incubationReminderQueue = [];
+    let incubationReminderTimer = null;
+    function startIncubationReminders() {
+        incubationReminderQueue = collectIncubationReminders();
+        if (incubationReminderQueue.length === 0) return;
+        showNextIncubationReminder();
+    }
+    function showNextIncubationReminder() {
+        if (incubationReminderQueue.length === 0) return;
+        const r = incubationReminderQueue.shift();
+        reminderShownMap[r.clutchId] = todayStr();
+        saveReminderShownMap();
+        const el = document.getElementById('incubation-reminder-banner');
+        const tail = r.overdue ? 'Необходимо проверить кладку.' : 'Необходимо вести мониторинг кладки.';
+        el.textContent = `Напоминание: Кладка ${r.species} находится в инкубаторе ${r.blockName} — ${r.daysElapsed}/${r.estimatedDays} суток. ${tail}`;
+        el.style.display = 'block';
+        clearTimeout(incubationReminderTimer);
+        incubationReminderTimer = setTimeout(hideCurrentReminder, 10000);
+    }
+    function hideCurrentReminder() {
+        clearTimeout(incubationReminderTimer);
+        document.getElementById('incubation-reminder-banner').style.display = 'none';
+        if (incubationReminderQueue.length > 0) setTimeout(showNextIncubationReminder, 3000);
+    }
+    setTimeout(startIncubationReminders, 5000);
 </script>
 
 <script>
