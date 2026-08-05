@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.2</title>
+    <title>ExoFeed Control v1.8.5</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -132,7 +132,8 @@
         
         .form-group { margin-bottom: 12px; position: relative; }
         label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 4px; }
-        input, select { width: 100%; background: #2a2a2a; border: 1px solid var(--border); color: #fff; padding: 12px; border-radius: 8px; box-sizing: border-box; font-size: 0.95rem; }
+        input, select, textarea { width: 100%; background: #2a2a2a; border: 1px solid var(--border); color: #fff; padding: 12px; border-radius: 8px; box-sizing: border-box; font-size: 0.95rem; }
+        textarea { font-family: inherit; line-height: 1.4; resize: vertical; }
         
         .btn-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
         .btn-opt { background: #333; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 6px; cursor: pointer; text-align: center; font-weight: bold; }
@@ -264,7 +265,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.2-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.5-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -358,7 +359,7 @@
         <div class="form-group"><label>Количество яиц</label><input type="number" id="clutch-egg-count" min="0"></div>
         <div class="form-group"><label>Вид животного</label><input type="text" id="clutch-species" list="clutch-species-datalist" placeholder="Начните вводить вид..."><datalist id="clutch-species-datalist"></datalist></div>
         <div class="form-group"><label>Примерный срок инкубации, суток (необязательно)</label><input type="number" id="clutch-estimated-days" min="1"></div>
-        <div class="form-group"><label>Родитель(и) / комментарий текстом (необязательно)</label><input type="text" id="clutch-parent-text" placeholder="Напр: второй родитель неизвестен"></div>
+        <div class="form-group"><label>Родитель(и) / комментарий текстом (необязательно)</label><textarea id="clutch-parent-text" rows="2" placeholder="Напр: второй родитель неизвестен"></textarea></div>
         <div class="form-group">
             <label>Добавить родителя из базы (необязательно, до двух)</label>
             <select id="clutch-parent-select"></select>
@@ -506,7 +507,7 @@
         </div>
         <div class="form-group">
             <label>Комментарий (необязательно)</label>
-            <textarea id="feed-comment" rows="2" placeholder="Напр: ел неохотно, вялый..."></textarea>
+            <textarea id="feed-comment" rows="3" placeholder="Напр: ел неохотно, вялый..."></textarea>
         </div>
         <button class="btn-main" onclick="submitFeedForm()">Записать кормление</button>
         <button class="btn-sec" onclick="closeModals()">Отмена</button>
@@ -538,7 +539,7 @@
         </div>
         <div class="form-group">
             <label>Комментарий</label>
-            <textarea id="editlog-comment" rows="2"></textarea>
+            <textarea id="editlog-comment" rows="3"></textarea>
         </div>
         <button class="btn-main" style="background:var(--green);" onclick="saveEditedFeedLog()">Сохранить изменения</button>
         <button class="btn-sec" onclick="closeModals()">Отмена</button>
@@ -564,7 +565,7 @@
         <button class="btn-main" style="background:var(--gold)" onclick="confirmArchiveAnimal('Реализация')">💰 Реализация</button>
         <button class="btn-sec" onclick="showArchiveOtherField()">Другое...</button>
         <div id="archive-reason-other-wrap" style="display:none; margin-top:10px;">
-            <input type="text" id="archive-reason-other-text" placeholder="Укажите причину">
+            <textarea id="archive-reason-other-text" rows="2" placeholder="Укажите причину"></textarea>
             <button class="btn-main" style="background:var(--purple); margin-top:8px;" onclick="confirmArchiveAnimal('Другое')">Подтвердить</button>
         </div>
         <button class="btn-sec" onclick="closeModals()">Отмена</button>
@@ -575,7 +576,7 @@
     <div class="modal-content">
         <h4>📝 Новая заметка</h4>
         <p style="font-size:0.8rem; color:#aaa; margin-top:-8px;">Наблюдение, состояние, событие — с датой и временем, история заметок сохраняется.</p>
-        <textarea id="new-note-text" rows="3" placeholder="Напр: вялый, отказ от корма второй раз подряд..."></textarea>
+        <textarea id="new-note-text" rows="4" placeholder="Напр: вялый, отказ от корма второй раз подряд..."></textarea>
         <button class="btn-main" style="background:var(--green);" onclick="saveNewNote()">Сохранить заметку</button>
         <button class="btn-sec" onclick="closeModals()">Отмена</button>
     </div>
@@ -714,7 +715,12 @@
 <div id="modal-morning-check" class="modal">
     <div class="modal-content" style="max-width: 600px;">
         <h4>🌙 Утренняя проверка — <span id="mc-block-name"></span></h4>
-        <button class="btn-main" style="background:var(--green); margin-bottom:10px;" onclick="applyMorningCheckBulk()">✔ Отметить выбранное как съедено полностью</button>
+        <div style="display:flex; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+            <button class="btn-main" style="background:var(--green); margin:0; flex:1;" onclick="applyMorningCheckBulk()">✔ Съедено полностью</button>
+            <button class="btn-main" style="background:var(--red); margin:0; flex:1;" onclick="applyMorningCheckBulkNotEaten()">✖ Не съедено</button>
+        </div>
+        <button class="btn-main" style="background:var(--purple); margin-bottom:10px;" onclick="applyMorningCheckBulkLive()">🐁 Применить выбранное — живой КО не съеден (по переключателю Жив/Погиб у каждой записи)</button>
+        <p style="font-size:0.7rem; color:#888; margin:-4px 0 10px;">«Съедено полностью» и «Не съедено» действуют на предубитый/размороженный КО. Живой КО обрабатывается отдельной кнопкой выше — у каждой такой записи в списке есть свой переключатель «Жив»/«Погиб», от него зависит расход.</p>
         <div id="morning-check-list" style="max-height:55vh; overflow-y:auto;"></div>
         <button class="btn-sec" onclick="closeModals()">Закрыть</button>
     </div>
@@ -778,6 +784,12 @@
     function toDateStr(d) {
         const pad = (n) => String(n).padStart(2, '0');
         return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+    // v1.8.5: экранирование текста при вставке в innerHTML внутри <textarea>...</textarea> —
+    // содержимое textarea рендерится как HTML-текст тега, а не атрибут value, поэтому кавычки
+    // экранировать недостаточно, нужны и & < >.
+    function escapeHtml(s) {
+        return String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
     // v1.8.2: значение по умолчанию для <input type="datetime-local"> (локальное время, без секунд)
     function toDateTimeLocalStr(d) {
@@ -1291,12 +1303,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.2';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.5';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -1869,10 +1881,10 @@
                             <span style="font-size:0.75rem;">из ${log.count}</span>
                         </div>
                         <div id="night-reason-wrap-${idx}-${logIdx}" style="display:none; margin-top:6px;">
-                            <input type="text" id="night-reason-${idx}-${logIdx}" placeholder="Причина отказа/недоедания (необязательно)" style="width:100%; box-sizing:border-box;">
+                            <textarea id="night-reason-${idx}-${logIdx}" rows="2" placeholder="Причина отказа/недоедания (необязательно)" style="width:100%; box-sizing:border-box;"></textarea>
                         </div>
                         ${aliveQuestionHtml}
-                        <input type="text" id="night-comment-${idx}-${logIdx}" placeholder="Комментарий (необязательно)" style="width:100%; box-sizing:border-box; margin-top:6px;">
+                        <textarea id="night-comment-${idx}-${logIdx}" rows="2" placeholder="Комментарий (необязательно)" style="width:100%; box-sizing:border-box; margin-top:6px;"></textarea>
                         <button class="btn-main" style="background:var(--green); padding:6px; margin-top:6px; margin-bottom:0; font-size:0.75rem;" onclick="resolveNightFeedForAnimal(${idx}, ${logIdx})">✔ Зафиксировать результат</button>
                     </div>`;
             });
@@ -1902,7 +1914,7 @@
                                     <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteLogItem(${idx}, ${realActualIdx})">✖</button>
                                 </div>
                             </div>
-                            <input type="text" value="${(log.comment || '').replace(/"/g, '&quot;')}" placeholder="Комментарий..." style="font-size:0.7rem; margin-top:4px; padding:4px 6px;" onchange="updateLogComment(${idx}, ${realActualIdx}, this.value)">
+                            <textarea rows="2" placeholder="Комментарий..." style="font-size:0.75rem; margin-top:4px; padding:6px 8px;" onchange="updateLogComment(${idx}, ${realActualIdx}, this.value)">${escapeHtml(log.comment || '')}</textarea>
                         </div>`;
                 });
                 feedLogHtml += `</div>`;
@@ -2674,22 +2686,21 @@
                             <div style="display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap;">
                                 <label style="font-size:0.75rem;">Съедено:</label>
                                 <input type="number" id="mc-eaten-${i}" min="0" max="${log.count}" value="${log.count}" style="width:60px;"
-                                    oninput="document.getElementById('mc-reason-wrap-${i}').style.display = (parseInt(this.value)||0) < ${log.count} ? 'block' : 'none';
-                                             ${log.koState === 'live' ? `document.getElementById('mc-alive-wrap-${i}').style.display = (parseInt(this.value)||0) === 0 ? 'block' : 'none';` : ''}">
+                                    oninput="document.getElementById('mc-reason-wrap-${i}').style.display = (parseInt(this.value)||0) < ${log.count} ? 'block' : 'none';">
                                 <span style="font-size:0.75rem;">из ${log.count}</span>
                             </div>
                             <div id="mc-reason-wrap-${i}" style="display:none; margin-top:6px;">
-                                <input type="text" id="mc-reason-${i}" placeholder="Причина отказа/недоедания (необязательно)" style="width:100%; box-sizing:border-box;">
+                                <textarea id="mc-reason-${i}" rows="2" placeholder="Причина отказа/недоедания (необязательно)" style="width:100%; box-sizing:border-box;"></textarea>
                             </div>
                             ${log.koState === 'live' ? `
-                            <div id="mc-alive-wrap-${i}" style="display:none; margin-top:6px;">
-                                <label style="font-size:0.72rem; color:var(--gold);">КО сейчас:</label>
+                            <div id="mc-alive-wrap-${i}" style="margin-top:6px;">
+                                <label style="font-size:0.72rem; color:var(--gold);">Если не съедено — КО сейчас:</label>
                                 <div style="display:flex; gap:6px; margin-top:4px;">
                                     <button type="button" class="btn-opt ${aliveOptClass} active" data-val="alive" onclick="selectOpt(this, '${aliveOptClass}')" style="padding:6px 10px; font-size:0.72rem;">Жив</button>
                                     <button type="button" class="btn-opt ${aliveOptClass}" data-val="dead" onclick="selectOpt(this, '${aliveOptClass}')" style="padding:6px 10px; font-size:0.72rem;">Погиб</button>
                                 </div>
                             </div>` : ''}
-                            <input type="text" id="mc-comment-${i}" placeholder="Комментарий (необязательно)" style="width:100%; box-sizing:border-box; margin-top:6px;">
+                            <textarea id="mc-comment-${i}" rows="2" placeholder="Комментарий (необязательно)" style="width:100%; box-sizing:border-box; margin-top:6px;"></textarea>
                             <button class="btn-main" style="background:var(--green); padding:6px; margin-top:6px; margin-bottom:0; font-size:0.75rem;" onclick="resolveMorningCheckItem(${i})">✔ Зафиксировать результат</button>
                         </div>
                     </div>
@@ -2756,6 +2767,79 @@
         renderMorningCheckList();
         render();
         alert(`Отмечено как съедено полностью: ${count}.`);
+    }
+
+    // v1.8.3: зеркальная массовая отметка "Не съедено" — только для НЕ живого КО (предубит/разморозка).
+    // Живой КО из массовой отметки исключён сознательно: там нужен выбор "Жив/Погиб", а это уже не массовое,
+    // а индивидуальное решение по каждой записи — делается на развёрнутой карточке ниже в списке.
+    function applyMorningCheckBulkNotEaten() {
+        if (!morningCheckState || morningCheckState.items.length === 0) return;
+        const { locId, blockId } = morningCheckState;
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+
+        const checkedItems = morningCheckState.items.filter((item, i) => {
+            const chk = document.getElementById(`mc-sel-${i}`);
+            return chk && chk.checked;
+        });
+        if (checkedItems.length === 0) { alert('Ничего не выбрано.'); return; }
+
+        const eligible = [];
+        let skippedLive = 0;
+        checkedItems.forEach(item => {
+            const log = getBlockCells(block)[item.cellIdx].animals[item.animalIdx].feed_logs[item.logIdx];
+            if (log.koState === 'live') skippedLive++;
+            else eligible.push(item);
+        });
+
+        if (eligible.length === 0) {
+            alert('Среди выбранного нет записей с не-живым КО — массовая отметка "Не съедено" здесь неприменима. Отметьте живой КО индивидуально на карточке.');
+            return;
+        }
+
+        eligible.forEach(item => {
+            resolveNightFeedCore(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx, {
+                eaten: 0, refusalReason: '', comment: '', aliveAfter: true
+            });
+        });
+        save();
+        renderMorningCheckList();
+        render();
+        alert(`Отмечено как не съедено: ${eligible.length}.` + (skippedLive > 0 ? ` Пропущено (живой КО, требует индивидуальной отметки): ${skippedLive}.` : ''));
+    }
+
+    // v1.8.4: массовая отметка для живого КО, оставленного на ночь и не съеденного — по переключателю
+    // "Жив"/"Погиб", который стоит у каждой такой записи прямо в списке (по умолчанию "Жив", т.к. это
+    // обычный исход для живого нетронутого корма). Расход (utilized) ставится только для отмеченных "Погиб".
+    function applyMorningCheckBulkLive() {
+        if (!morningCheckState || morningCheckState.items.length === 0) return;
+        const { locId, blockId } = morningCheckState;
+
+        const checkedIdx = morningCheckState.items
+            .map((item, i) => ({ item, i }))
+            .filter(({ i }) => { const chk = document.getElementById(`mc-sel-${i}`); return chk && chk.checked; });
+        if (checkedIdx.length === 0) { alert('Ничего не выбрано.'); return; }
+
+        const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
+        let applied = 0, skippedNonLive = 0;
+        checkedIdx.forEach(({ item, i }) => {
+            const log = getBlockCells(block)[item.cellIdx].animals[item.animalIdx].feed_logs[item.logIdx];
+            if (log.koState !== 'live') { skippedNonLive++; return; }
+            const deadBtn = document.querySelector(`.mc-alive-opt-${i}[data-val="dead"].active`);
+            const aliveAfter = !deadBtn;
+            resolveNightFeedCore(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx, {
+                eaten: 0, refusalReason: '', comment: '', aliveAfter
+            });
+            applied++;
+        });
+
+        if (applied === 0) {
+            alert('Среди выбранного нет записей с живым КО — эта кнопка для них и предназначена. Предубитый/размороженный КО обрабатывается кнопками выше.');
+            return;
+        }
+        save();
+        renderMorningCheckList();
+        render();
+        alert(`Обработано записей с живым КО: ${applied} (по переключателю "Жив"/"Погиб" у каждой).` + (skippedNonLive > 0 ? ` Пропущено (не живой КО): ${skippedNonLive}.` : ''));
     }
 
     function openSheddingModal(idx) { state.animalIdx = idx; showModal('modal-shedding'); }
@@ -3788,7 +3872,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.2', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.5', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
