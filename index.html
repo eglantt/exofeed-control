@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.6</title>
+    <title>ExoFeed Control v1.8.7</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -60,6 +60,14 @@
         .block-unit.incubator-block { border: 2px solid var(--incubator); background: #12302c; }
         body.engineer-mode .block-unit.incubator-block { border: 2px dashed var(--incubator); background: #12302c; }
         .block-header { font-size: 0.9rem; font-weight: bold; color: var(--blue); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .pending-batches:empty { display: none; }
+        .pending-batch-badge {
+            display: flex; justify-content: space-between; align-items: center; gap: 8px;
+            background: rgba(106, 27, 154, 0.25); border: 1px solid var(--purple); border-radius: 6px;
+            padding: 5px 8px; margin-bottom: 8px; font-size: 0.72rem; color: #e6cdf5;
+        }
+        .pending-batch-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .feedlog-pending { background: rgba(106, 27, 154, 0.22) !important; border-left: 3px solid var(--purple) !important; }
         
         /* Весь стеллаж скроллится как единое целое: колонки (адреса мест) у всех рядов выровнены */
         .rack { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
@@ -265,7 +273,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.6-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.7-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -532,6 +540,14 @@
         <div class="form-group">
             <label>Предложено, шт</label>
             <input type="number" id="editlog-count" min="1">
+        </div>
+        <div class="form-group">
+            <label>Состояние КО на момент подачи</label>
+            <div style="display:flex; gap:6px;">
+                <button type="button" class="btn-opt editlog-koState-opt" data-val="prekilled" onclick="selectOpt(this, 'editlog-koState-opt')" style="padding:8px 4px; font-size:0.78rem;">Предубит</button>
+                <button type="button" class="btn-opt editlog-koState-opt" data-val="thawed" onclick="selectOpt(this, 'editlog-koState-opt')" style="padding:8px 4px; font-size:0.78rem;">Разморозка</button>
+                <button type="button" class="btn-opt editlog-koState-opt" data-val="live" onclick="selectOpt(this, 'editlog-koState-opt')" style="padding:8px 4px; font-size:0.78rem; color:var(--gold);">Живой</button>
+            </div>
         </div>
         <div class="form-group">
             <label>Съедено, шт (оставьте пустым, если ещё не разрешено — "оставлен на ночь")</label>
@@ -1098,12 +1114,21 @@
         const block = db.find(l => l.id === massFeedState.locId).blocks.find(b => b.id === massFeedState.blockId);
         const blockCells = getBlockCells(block);
         let animals = [];
+        let addresses = []; // {cellIdx, animalIdx} — параллельно animals[], для формирования пакета отмены
         massFeedState.selectedCells.forEach(flatIdx => {
             const cell = blockCells[flatIdx];
-            if (cell && !cell.isService) animals.push(...cell.animals);
+            if (cell && !cell.isService) {
+                cell.animals.forEach((a, aIdx) => { animals.push(a); addresses.push({ cellIdx: flatIdx, animalIdx: aIdx }); });
+            }
         });
         const cellCount = massFeedState.selectedCells.size;
         applyFeedingRecord(animals, params);
+        // v1.8.7: пакет отмены — все записи только что СОЗДАНЫ (isNew), значит откат = просто удалить их
+        const batchItems = animals.map((a, i) => ({
+            cellIdx: addresses[i].cellIdx, animalIdx: addresses[i].animalIdx,
+            logIdx: a.feed_logs.length - 1, isNew: true, prevSnapshot: null, touched: false
+        }));
+        createPendingBatch('feed', massFeedState.locId, massFeedState.blockId, 'Массовое кормление', batchItems);
         save();
         closeModals();
         massFeedState = null;
@@ -1355,12 +1380,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.6';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.7';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -1490,6 +1515,102 @@
     } catch (e) { clutchArchiveDb = []; }
     clutchArchiveDb.forEach(rec => { if (rec && rec.clutch) normalizeClutch(rec.clutch); });
     function saveClutchArchive() { localStorage.setItem(CLUTCH_ARCHIVE_KEY, JSON.stringify(clutchArchiveDb)); }
+
+    // --- ОТМЕНА МАССОВЫХ ДЕЙСТВИЙ (v1.8.7) ---
+    // ПОСТОЯННЫЙ ключ (не завязан на версию БД) — переживает закрытие/перезапуск приложения в течение окна отмены.
+    // Каждый пакет — результат ОДНОГО массового действия (массовое кормление или одна из 3 кнопок утренней
+    // проверки), с собственным независимым отсчётом. Записи, помеченные вручную (touched），
+    // исключаются из отката при нажатии "Отменить всё", остальное поведение — см. CLAUDE.md.
+    const PENDING_BATCH_KEY = 'exofeed_pending_batches';
+    const PENDING_BATCH_DURATION_MS = 5 * 60 * 1000; // 5 минут
+    let pendingBatches = [];
+    try {
+        const storedBatches = JSON.parse(localStorage.getItem(PENDING_BATCH_KEY) || '[]');
+        if (Array.isArray(storedBatches)) pendingBatches = storedBatches.filter(b => b && b.expiresAt > Date.now());
+    } catch (e) { pendingBatches = []; }
+    function savePendingBatches() { localStorage.setItem(PENDING_BATCH_KEY, JSON.stringify(pendingBatches)); }
+
+    function createPendingBatch(type, locId, blockId, label, items) {
+        if (!items || items.length === 0) return null;
+        const batch = {
+            id: Date.now() + Math.random(),
+            type, locId, blockId, label,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + PENDING_BATCH_DURATION_MS,
+            items
+        };
+        pendingBatches.push(batch);
+        savePendingBatches();
+        return batch;
+    }
+    // Снимок лога ДО массового изменения — для отката записей утренней проверки (которые не создаются, а меняются)
+    function snapshotFeedLog(locId, blockId, cellIdx, animalIdx, logIdx) {
+        const cell = getCell(locId, blockId, cellIdx);
+        return JSON.parse(JSON.stringify(cell.animals[animalIdx].feed_logs[logIdx]));
+    }
+    // Убираем просроченные пакеты (данные и так уже сохранены — откатывать нечего, просто гасим подсветку/отсчёт)
+    function pruneExpiredBatches() {
+        const before = pendingBatches.length;
+        pendingBatches = pendingBatches.filter(b => b.expiresAt > Date.now());
+        if (pendingBatches.length !== before) savePendingBatches();
+    }
+    // Если конкретная запись поправлена вручную (обычное редактирование) — исключаем её из всех пакетов отката,
+    // но сам пакет (и остальные его записи) остаётся активным.
+    function markLogTouched(locId, blockId, cellIdx, animalIdx, logIdx) {
+        let changed = false;
+        pendingBatches.forEach(b => {
+            if (b.locId !== locId || b.blockId !== blockId) return;
+            b.items.forEach(it => {
+                if (it.cellIdx === cellIdx && it.animalIdx === animalIdx && it.logIdx === logIdx && !it.touched) {
+                    it.touched = true; changed = true;
+                }
+            });
+        });
+        if (changed) savePendingBatches();
+    }
+    function getActivePendingBatches(locId, blockId) {
+        pruneExpiredBatches();
+        return pendingBatches.filter(b => b.locId === locId && b.blockId === blockId);
+    }
+    function isLogInActiveBatch(locId, blockId, cellIdx, animalIdx, logIdx) {
+        pruneExpiredBatches();
+        return pendingBatches.some(b => b.locId === locId && b.blockId === blockId &&
+            b.items.some(it => it.cellIdx === cellIdx && it.animalIdx === animalIdx && it.logIdx === logIdx && !it.touched));
+    }
+    function confirmPendingBatch(idx) {
+        if (!pendingBatches[idx]) return;
+        pendingBatches.splice(idx, 1);
+        savePendingBatches();
+        render();
+    }
+    function revertPendingBatch(idx) {
+        const batch = pendingBatches[idx];
+        if (!batch) return;
+        const block = db.find(l => l.id === batch.locId)?.blocks.find(b => b.id === batch.blockId);
+        if (!block) { pendingBatches.splice(idx, 1); savePendingBatches(); render(); return; }
+        // Откатываем от последней записи к первой, чтобы удаление (splice) новых записей не сбивало индексы
+        // ещё не обработанных элементов ТОГО ЖЕ animal.feed_logs в пределах этого пакета.
+        const toRevert = batch.items.filter(it => !it.touched).slice().sort((a, b2) => b2.logIdx - a.logIdx);
+        toRevert.forEach(it => {
+            const cell = getBlockCells(block)[it.cellIdx];
+            if (!cell || !cell.animals[it.animalIdx]) return;
+            const logs = cell.animals[it.animalIdx].feed_logs;
+            if (it.isNew) {
+                if (logs[it.logIdx]) logs.splice(it.logIdx, 1);
+            } else if (it.prevSnapshot) {
+                logs[it.logIdx] = JSON.parse(JSON.stringify(it.prevSnapshot));
+            }
+        });
+        pendingBatches.splice(idx, 1);
+        savePendingBatches();
+        save();
+    }
+    function formatBatchCountdown(expiresAt) {
+        const msLeft = Math.max(0, expiresAt - Date.now());
+        const totalSec = Math.ceil(msLeft / 1000);
+        const m = Math.floor(totalSec / 60), s = totalSec % 60;
+        return `${m}:${String(s).padStart(2, '0')}`;
+    }
 
     function saveArchive() {
         try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archiveDb)); } catch (e) {}
@@ -1955,11 +2076,13 @@
                     const reasonText = log.refusalReason ? `<div style="font-size:0.68rem; color:#e57373;">Причина: ${log.refusalReason}</div>` : '';
                     const forcedText = log.forced ? ` <span style="color:var(--purple); font-size:0.68rem;">[принудительно]</span>` : '';
                     const canFlagIssue = (log.status === 'Съедено' || log.status === 'Частично') && (Date.now() - Number(log.timestamp) < REGURGITATION_WINDOW_MS);
+                    const isPending = isLogInActiveBatch(state.locId, state.blockId, state.cellIdx, idx, realActualIdx);
                     feedLogHtml += `
-                        <div class="log-row" style="flex-direction:column; align-items:stretch;">
+                        <div class="log-row${isPending ? ' feedlog-pending' : ''}" style="flex-direction:column; align-items:stretch;">
                             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">
                                 <div style="flex:1;">
                                     <span>${formatLogDateTime(log.timestamp, log.date)} — ${FEED_TYPE_LABELS[log.type] || log.type} [№${log.sizeNum}] ${log.sizeTitle} (${log.count} шт)${eatenText} <b style="color:${badgeColor}">[${log.status}]</b>${forcedText}</span>
+                                    ${isPending ? `<span style="font-size:0.65rem; color:#e6cdf5;">↩ можно отменить массово</span>` : ''}
                                     ${reasonText}
                                 </div>
                                 <div style="display:flex; gap:4px; flex-shrink:0;">
@@ -2371,6 +2494,7 @@
         document.getElementById('editlog-count').value = log.count;
         document.getElementById('editlog-eaten').value = (log.eatenCount === null || log.eatenCount === undefined) ? '' : log.eatenCount;
         document.getElementById('editlog-comment').value = log.comment || '';
+        document.querySelectorAll('.editlog-koState-opt').forEach(b => b.classList.toggle('active', b.dataset.val === (log.koState || 'prekilled')));
         showModal('modal-edit-feedlog');
     }
     function renderEditLogSizes() {
@@ -2398,6 +2522,16 @@
             else if (log.status !== 'Срыгивание') log.status = 'Съедено';
         }
         log.comment = document.getElementById('editlog-comment').value.trim();
+        const koStateBtn = document.querySelector('.editlog-koState-opt.active');
+        log.koState = koStateBtn ? koStateBtn.dataset.val : (log.koState || 'prekilled');
+        // Пересчитываем "Расход КО" под новое состояние КО/съедено — те же правила, что при обычном разрешении
+        // (см. resolveNightFeedCore): для живого КО, оставленного полностью нетронутым, форма правки не различает
+        // "жив"/"погиб" отдельно — по умолчанию считаем "жив" (не в расходе), это осознанное упрощение.
+        if (log.eatenCount !== null && log.eatenCount !== undefined) {
+            if (log.eatenCount > 0) log.utilized = true;
+            else log.utilized = log.koState !== 'live';
+        }
+        markLogTouched(state.locId, state.blockId, state.cellIdx, editLogContext.animalIdx, editLogContext.logIdx);
         save();
         closeModals();
         openCell(state.locId, state.blockId, state.cellIdx);
@@ -2807,16 +2941,20 @@
         });
         if (selected.length === 0) { alert('Ничего не выбрано.'); return; }
 
+        const batchItems = [];
         selected.forEach(item => {
             // "Съедено полностью" — эквивалент eaten = count. Утилизация в этом случае всегда true
             // (см. resolveNightFeedCore: съеденный КО утилизирован независимо от состояния), поэтому
             // вопрос "жив/погиб" здесь не нужен ни при каком состоянии КО.
             const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
             const log = getBlockCells(block)[item.cellIdx].animals[item.animalIdx].feed_logs[item.logIdx];
+            const prevSnapshot = snapshotFeedLog(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx);
             resolveNightFeedCore(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx, {
                 eaten: log.count, refusalReason: '', comment: '', aliveAfter: true
             });
+            batchItems.push({ cellIdx: item.cellIdx, animalIdx: item.animalIdx, logIdx: item.logIdx, isNew: false, prevSnapshot, touched: false });
         });
+        createPendingBatch('check', locId, blockId, 'Массовая проверка — Съедено полностью', batchItems);
         save();
         const count = selected.length;
         renderMorningCheckList();
@@ -2851,11 +2989,15 @@
             return;
         }
 
+        const batchItems = [];
         eligible.forEach(item => {
+            const prevSnapshot = snapshotFeedLog(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx);
             resolveNightFeedCore(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx, {
                 eaten: 0, refusalReason: '', comment: '', aliveAfter: true
             });
+            batchItems.push({ cellIdx: item.cellIdx, animalIdx: item.animalIdx, logIdx: item.logIdx, isNew: false, prevSnapshot, touched: false });
         });
+        createPendingBatch('check', locId, blockId, 'Массовая проверка — Не съедено', batchItems);
         save();
         renderMorningCheckList();
         render();
@@ -2876,14 +3018,17 @@
 
         const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
         let applied = 0, skippedNonLive = 0;
+        const batchItems = [];
         checkedIdx.forEach(({ item, i }) => {
             const log = getBlockCells(block)[item.cellIdx].animals[item.animalIdx].feed_logs[item.logIdx];
             if (log.koState !== 'live') { skippedNonLive++; return; }
             const deadBtn = document.querySelector(`.mc-alive-opt-${i}[data-val="dead"].active`);
             const aliveAfter = !deadBtn;
+            const prevSnapshot = snapshotFeedLog(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx);
             resolveNightFeedCore(locId, blockId, item.cellIdx, item.animalIdx, item.logIdx, {
                 eaten: 0, refusalReason: '', comment: '', aliveAfter
             });
+            batchItems.push({ cellIdx: item.cellIdx, animalIdx: item.animalIdx, logIdx: item.logIdx, isNew: false, prevSnapshot, touched: false });
             applied++;
         });
 
@@ -2891,6 +3036,7 @@
             alert('Среди выбранного нет записей с живым КО — эта кнопка для них и предназначена. Предубитый/размороженный КО обрабатывается кнопками выше.');
             return;
         }
+        createPendingBatch('check', locId, blockId, 'Массовая проверка — живой КО', batchItems);
         save();
         renderMorningCheckList();
         render();
@@ -3582,6 +3728,19 @@ ${bodyHtml}
                                 <span class="edit-ui" style="color:var(--red); font-size:1.2rem; cursor:pointer;" onclick="deleteBlock(${loc.id}, ${block.id})">✖</span>
                             </div>
                         </div>
+                        <div class="pending-batches">
+                            ${getActivePendingBatches(loc.id, block.id).map(b => {
+                                const bIdx = pendingBatches.indexOf(b);
+                                return `
+                                <div class="pending-batch-badge" data-batch-id="${b.id}">
+                                    <span>↩ Отменить: ${b.label} · <span class="batch-countdown">${formatBatchCountdown(b.expiresAt)}</span></span>
+                                    <span class="pending-batch-actions">
+                                        <button class="btn-del" style="padding:2px 8px; font-size:0.7rem;" onclick="revertPendingBatch(${bIdx})">↩ Отменить</button>
+                                        <button class="btn-del" style="padding:2px 8px; font-size:0.7rem; background:var(--green);" onclick="confirmPendingBatch(${bIdx})">✔</button>
+                                    </span>
+                                </div>`;
+                            }).join('')}
+                        </div>
                         <div class="rack" data-block-id="${block.id}"><div class="rack-inner">`;
 
                 // Адрес места = буква ряда (A,B,C...) + номер места в ряду (1,2,3...), вычисляется на лету
@@ -3955,7 +4114,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.6', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.7', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
@@ -4030,9 +4189,11 @@ ${bodyHtml}
         db = [];
         archiveDb = [];
         clutchArchiveDb = [];
+        pendingBatches = [];
         localStorage.removeItem(CURRENT_DB_KEY);
         saveArchive();
         saveClutchArchive();
+        savePendingBatches();
         save();
         alert("База данных полностью очищена.");
     }
@@ -4048,6 +4209,21 @@ ${bodyHtml}
         const pad = (n) => String(n).padStart(2, '0');
         document.getElementById('clock-date').textContent = `📅 ${now.getDate()} ${CAL_MONTHS[now.getMonth()]}`;
         document.getElementById('clock-time').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        tickPendingBatchCountdowns();
+    }
+    // v1.8.7: лёгкое обновление отсчёта у бейджей отмены — без полной перерисовки экрана (только текст).
+    // Если какой-то пакет истёк — один раз перерисовываем целиком, чтобы бейдж/подсветка пропали.
+    function tickPendingBatchCountdowns() {
+        if (pendingBatches.length === 0) return;
+        let expired = false;
+        document.querySelectorAll('.pending-batch-badge').forEach(el => {
+            const batch = pendingBatches.find(b => String(b.id) === el.dataset.batchId);
+            if (!batch) return;
+            if (batch.expiresAt <= Date.now()) { expired = true; return; }
+            const span = el.querySelector('.batch-countdown');
+            if (span) span.textContent = formatBatchCountdown(batch.expiresAt);
+        });
+        if (expired) { pruneExpiredBatches(); render(); }
     }
     tickClock();
     setInterval(tickClock, 1000);
