@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.5</title>
+    <title>ExoFeed Control v1.8.6</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -265,7 +265,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.5-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.6-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -585,10 +585,21 @@
 <div id="modal-add-temp" class="modal">
     <div class="modal-content">
         <h4>🌡 Новое показание температуры</h4>
-        <p style="font-size:0.8rem; color:#aaa; margin-top:-8px;">Фоновая температура в террариуме/контейнере, °C (можно отрицательную).</p>
+        <p style="font-size:0.8rem; color:#aaa; margin-top:-8px;">Температура в этой ячейке (террариуме/контейнере), °C (можно отрицательную).</p>
         <input type="number" id="new-temp-value" step="0.5" placeholder="Напр: 26">
         <button class="btn-main" style="background:var(--green);" onclick="saveNewTemp()">Сохранить показание</button>
         <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
+<div id="modal-loc-temp" class="modal">
+    <div class="modal-content">
+        <h4>🌡 Фоновая температура — <span id="loc-temp-name"></span></h4>
+        <p style="font-size:0.8rem; color:#aaa; margin-top:-8px;">Температура помещения/локации в целом, не привязана к конкретному стеллажу или ячейке.</p>
+        <input type="number" id="new-loc-temp-value" step="0.5" placeholder="Напр: 24">
+        <button class="btn-main" style="background:var(--green);" onclick="saveLocationTemp()">Сохранить показание</button>
+        <div id="loc-temp-history" style="margin-top:12px;"></div>
+        <button class="btn-sec" onclick="closeModals()">Закрыть</button>
     </div>
 </div>
 
@@ -877,6 +888,47 @@
         cell.tempLog.splice(logIdx, 1);
         save();
         openCell(state.locId, state.blockId, state.cellIdx);
+    }
+
+    // --- Фоновая температура ЛОКАЦИИ в целом (v1.8.6) — не привязана к стеллажу/ячейке, отдельный журнал у location ---
+    let locTempModalLocId = null;
+    function openLocationTempModal(locId) {
+        locTempModalLocId = locId;
+        const loc = db.find(l => l.id === locId);
+        document.getElementById('loc-temp-name').textContent = loc.name;
+        document.getElementById('new-loc-temp-value').value = '';
+        renderLocationTempHistory(loc);
+        showModal('modal-loc-temp');
+    }
+    function renderLocationTempHistory(loc) {
+        const hist = document.getElementById('loc-temp-history');
+        if (!loc.ambientTempLog || loc.ambientTempLog.length === 0) { hist.innerHTML = ''; return; }
+        hist.innerHTML = `<div class="history-box">` + loc.ambientTempLog.slice().reverse().map((t, lIdx) => {
+            const realIdx = loc.ambientTempLog.length - 1 - lIdx;
+            return `<div class="log-row">
+                <span>${formatLogDateTime(t.timestamp)}: <b>${formatTemp(t.value)}</b></span>
+                <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteLocationTempLog(${realIdx})">✖</button>
+            </div>`;
+        }).join('') + `</div>`;
+    }
+    function saveLocationTemp() {
+        const raw = document.getElementById('new-loc-temp-value').value;
+        if (raw === '' || isNaN(Number(raw))) { alert('Введите числовое значение температуры.'); return; }
+        const loc = db.find(l => l.id === locTempModalLocId);
+        if (!Array.isArray(loc.ambientTempLog)) loc.ambientTempLog = [];
+        loc.ambientTempLog.push({ timestamp: Date.now(), value: Number(raw) });
+        save();
+        document.getElementById('new-loc-temp-value').value = '';
+        renderLocationTempHistory(loc);
+        render();
+    }
+    function deleteLocationTempLog(logIdx) {
+        if (!confirm('Удалить это показание?')) return;
+        const loc = db.find(l => l.id === locTempModalLocId);
+        loc.ambientTempLog.splice(logIdx, 1);
+        save();
+        renderLocationTempHistory(loc);
+        render();
     }
 
     // Категории событий одной ячейки на конкретную дату (для рамки в режиме просмотра и для сетки календаря)
@@ -1303,12 +1355,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.5';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.6';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -1412,7 +1464,10 @@
         delete block.cells;
         delete block.cols;
     }
-    db.forEach(loc => { (loc.blocks || []).forEach(migrateBlock); });
+    db.forEach(loc => {
+        if (!Array.isArray(loc.ambientTempLog)) loc.ambientTempLog = []; // v1.8.6: фоновая температура локации (не привязана к стеллажу/ячейке)
+        (loc.blocks || []).forEach(migrateBlock);
+    });
 
     // --- АРХИВ ВЫБЫВШИХ ЖИВОТНЫХ (v1.5.6) ---
     // Хранится ПОСТОЯННЫМ ключом, никогда не переименовывается между версиями (в отличие от CURRENT_DB_KEY) —
@@ -1574,7 +1629,7 @@
         const name = document.getElementById('loc-name').value;
         if(!name) return;
         if(state.locId) { db.find(l => l.id === state.locId).name = name; } 
-        else { db.push({id: Date.now(), name, blocks: []}); }
+        else { db.push({id: Date.now(), name, blocks: [], ambientTempLog: []}); }
         save(); closeModals();
     }
 
@@ -1634,7 +1689,7 @@
         hist.innerHTML = `<div class="history-box">` + block.targetTempLog.slice().reverse().map((r, lIdx) => {
             const realIdx = block.targetTempLog.length - 1 - lIdx;
             return `<div class="log-row">
-                <span>${formatLogDateTime(r.timestamp)} — <b>${formatTemp(r.tempMin)} … ${formatTemp(r.tempMax)}</b></span>
+                <span>${formatLogDateTime(r.timestamp)}: <b>${formatTemp(r.tempMin)} … ${formatTemp(r.tempMax)}</b></span>
                 <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteBlockTempLog(${realIdx})">✖</button>
             </div>`;
         }).join('') + `</div>`;
@@ -1802,7 +1857,7 @@
                 const realIdx = cell.tempLog.length - 1 - lIdx;
                 tempHistoryHtml += `
                     <div class="log-row">
-                        <span>${formatLogDateTime(t.timestamp)} — <b>${formatTemp(t.value)}</b></span>
+                        <span>${formatLogDateTime(t.timestamp)}: <b>${formatTemp(t.value)}</b></span>
                         <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteTempLog(${realIdx})">✖</button>
                     </div>`;
             });
@@ -2026,7 +2081,7 @@
                     const humText = (p.humidity !== null && p.humidity !== undefined && p.humidity !== '') ? `, влажность <b>${p.humidity}%</b>` : '';
                     paramHistoryHtml += `
                         <div class="log-row">
-                            <span>${formatLogDateTime(p.timestamp)} — <b>${formatTemp(p.temp)}</b>${humText}</span>
+                            <span>${formatLogDateTime(p.timestamp)}: <b>${formatTemp(p.temp)}</b>${humText}</span>
                             <button class="btn-del" style="padding:2px 6px; font-size:0.65rem;" onclick="deleteClutchParamLog(${idx}, ${realIdx})">✖</button>
                         </div>`;
                 });
@@ -2998,7 +3053,8 @@
 
         const container = document.getElementById('stats-data');
         if(Object.keys(summary).length === 0 && journalRowsHtml === '') { 
-            container.innerHTML = '<p>В этой комнате еще нет записей о съеденных кормах.</p>'; 
+            container.innerHTML = '<p>В этой комнате еще нет записей о съеденных кормах.</p>'
+                + `<button class="btn-main" style="background:#00838f; margin-top:10px;" onclick="openTemperatureReport(${locId})">🌡 Отчёт по температуре (HTML)</button>`;
         } else {
             let html = `<h5 style="color:var(--blue); margin-bottom:5px;">📊 1. Сводный расход КО по типам</h5>`;
             html += '<table class="stat-table"><thead><tr><th>Размер КО</th><th>Кол-во</th><th>Биомасса</th></tr></thead><tbody>';
@@ -3020,6 +3076,7 @@
             html += `<button class="btn-main" style="background:#37474f;" onclick="openWeeklyReport(${locId})">📅 Отчёт за неделю (HTML)</button>`;
             html += `<button class="btn-main" style="background:#37474f;" onclick="openCalendarWeekReport(${locId})">🗓️ Отчёт за календарную неделю (HTML)</button>`;
             html += `<button class="btn-main" style="background:#37474f;" onclick="openFullLocationReport(${locId})">📚 Полный отчёт по всем животным (HTML)</button>`;
+            html += `<button class="btn-main" style="background:#00838f;" onclick="openTemperatureReport(${locId})">🌡 Отчёт по температуре (HTML)</button>`;
             container.innerHTML = html;
         }
         showModal('modal-stats');
@@ -3391,6 +3448,31 @@ ${bodyHtml}
 
 
     // Полный отчёт по всем животным локации сразу (вся история кормлений и линек каждой особи)
+    // v1.8.6: отчёт по температурному режиму локации — показания ячеек + фоновая температура самой локации вместе
+    function openTemperatureReport(locId) {
+        const loc = db.find(l => l.id === locId);
+        let rows = [];
+        loc.blocks.forEach(block => {
+            (block.rows || []).forEach((row, rIdx) => (row.cells || []).forEach((cell, cIdx) => {
+                if (!cell.tempLog || cell.tempLog.length === 0) return;
+                const address = getCellAddress(rIdx, cIdx);
+                cell.tempLog.forEach(t => rows.push({ timestamp: t.timestamp, value: t.value, place: `${block.name}, яч. ${address}` }));
+            }));
+        });
+        (loc.ambientTempLog || []).forEach(t => rows.push({ timestamp: t.timestamp, value: t.value, place: 'Фоновая (локация целиком)' }));
+
+        rows.sort((a, b) => b.timestamp - a.timestamp);
+        const tableRows = rows.map(r => `
+            <tr><td style="white-space:nowrap; font-size:0.75rem; color:#aaa;">${formatLogDateTime(r.timestamp)}</td><td>${r.place}</td><td>${formatTemp(r.value)}</td></tr>`).join('');
+        const bodyHtml = `
+            <p><b>Всего показаний:</b> ${rows.length}</p>
+            <table class="rep-table">
+                <thead><tr><th>Дата/время</th><th>Место</th><th>Температура</th></tr></thead>
+                <tbody>${tableRows || '<tr><td colspan="3">Показаний ещё нет</td></tr>'}</tbody>
+            </table>`;
+        showReportModal(`Отчёт по температуре — ${loc.name}`, bodyHtml, `report_temp_${loc.name}_${new Date().toISOString().slice(0, 10)}.html`);
+    }
+
     function openFullLocationReport(locId) {
         const loc = db.find(l => l.id === locId);
         let bodyHtml = `<p>Локация: <b>${loc.name}</b>. Полная история по всем заселённым животным.</p>`;
@@ -3457,6 +3539,7 @@ ${bodyHtml}
                     <div class="loc-actions">
                         <button class="btn-main" style="margin:0; padding:10px; font-size:0.8rem; background:#333;" onclick="showLocationStats(${loc.id})">📈 СТАТИСТИКА И ОТЧЁТЫ</button>
                         <button class="btn-main" style="margin:0; padding:10px; font-size:0.8rem; background:#37474f;" onclick="openLocationCalendar(${loc.id})">📅 КАЛЕНДАРЬ</button>
+                        <button class="btn-main" style="margin:0; padding:10px; font-size:0.8rem; background:#00838f;" onclick="openLocationTempModal(${loc.id})">🌡 ${loc.ambientTempLog && loc.ambientTempLog.length > 0 ? formatTemp(loc.ambientTempLog[loc.ambientTempLog.length - 1].value) : 'Фоновая темп.'}</button>
                         <button class="btn-sec edit-ui" style="margin:0; padding:10px; font-size:0.8rem; background: var(--blue);" onclick="openBlockModal(${loc.id}, null)">+ Стеллаж / Ряд</button>
                     </div>`;
 
@@ -3872,7 +3955,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.5', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.6', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
@@ -3919,7 +4002,10 @@ ${bodyHtml}
             // Автоматический safety-бэкап текущего состояния перед заменой — на случай, если импорт окажется ошибкой
             downloadBackupFile(db, archiveDb, clutchArchiveDb, 'safety_before_import');
 
-            importedDb.forEach(loc => { (loc.blocks || []).forEach(migrateBlock); });
+            importedDb.forEach(loc => {
+                if (!Array.isArray(loc.ambientTempLog)) loc.ambientTempLog = [];
+                (loc.blocks || []).forEach(migrateBlock);
+            });
             importedArchive.forEach(rec => { if (rec && rec.animal) normalizeAnimal(rec.animal); });
             importedClutchArchive.forEach(rec => { if (rec && rec.clutch) normalizeClutch(rec.clutch); });
 
