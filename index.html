@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.7</title>
+    <title>ExoFeed Control v1.8.8</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -273,7 +273,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.7-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.8-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -632,9 +632,11 @@
         </div>
         <div class="form-group">
             <label>Целевое место</label>
-            <select id="transfer-cell"></select>
+            <select id="transfer-cell" onchange="updateTransferSummary()"></select>
         </div>
-        <button class="btn-main" style="background:var(--purple);" onclick="executeTransfer()">Выполнить трансфер</button>
+        <p id="transfer-empty-msg" style="display:none; color:var(--red); font-size:0.85rem; margin-top:-8px;">В этом стеллаже нет доступных ячеек.</p>
+        <p id="transfer-summary" style="font-size:0.82rem; color:#7fb8ff; margin:10px 0;"></p>
+        <button class="btn-main" id="transfer-submit-btn" style="background:var(--purple);" onclick="executeTransfer()">Выполнить трансфер</button>
         <button class="btn-sec" onclick="document.getElementById('modal-transfer').style.display='none'">Отмена</button>
     </div>
 </div>
@@ -1380,12 +1382,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.7';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.8';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -3085,6 +3087,9 @@
         state.animalIdx = idx;
         const locSelect = document.getElementById('transfer-loc'); locSelect.innerHTML = '';
         db.forEach(l => locSelect.innerHTML += `<option value="${l.id}">${l.name}</option>`);
+        // v1.8.8: по умолчанию — ТЕКУЩАЯ локация животного, а не первая в списке (была причина потери
+        // данных: невнимательно выбранная "первая по умолчанию" локация вместо нужной).
+        locSelect.value = String(state.locId);
         renderTransferBlocks(); showModal('modal-transfer');
     }
     function renderTransferBlocks() {
@@ -3092,6 +3097,10 @@
         const blockSelect = document.getElementById('transfer-block'); blockSelect.innerHTML = '';
         const loc = db.find(l => l.id === locId);
         if(loc) loc.blocks.filter(b => b.type !== INCUBATOR_BLOCK_TYPE).forEach(b => blockSelect.innerHTML += `<option value="${b.id}">${b.name}</option>`);
+        // Если это "родная" локация животного — заодно подставляем и его текущий стеллаж по умолчанию
+        if (locId === state.locId && Array.from(blockSelect.options).some(o => parseInt(o.value) === state.blockId)) {
+            blockSelect.value = String(state.blockId);
+        }
         renderTransferCells();
     }
     function renderTransferCells() {
@@ -3103,16 +3112,57 @@
             if (c.isService) return; // в сервисное место животных переселить нельзя
             const pos = locateCellPosition(block, idx);
             const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
-            cellSelect.innerHTML += `<option value="${idx}">${address}${c.label ? ' — ' + c.label : ''}</option>`;
+            // v1.8.8: занятые ячейки не скрываем (осознанно подселить второе животное — обычный случай),
+            // но явно помечаем, кто там уже есть, чтобы это не было случайностью.
+            const occupantsText = (c.animals && c.animals.length > 0)
+                ? ` — уже занято: ${c.animals.map(a => a.species).join(', ')}`
+                : '';
+            cellSelect.innerHTML += `<option value="${idx}">${address}${c.label ? ' — ' + c.label : ''}${occupantsText}</option>`;
         });
+        const isEmpty = cellSelect.options.length === 0;
+        document.getElementById('transfer-empty-msg').style.display = isEmpty ? 'block' : 'none';
+        document.getElementById('transfer-submit-btn').disabled = isEmpty;
+        updateTransferSummary();
+    }
+    // v1.8.8: живая строка "Из: ... → В: ...", обновляется при любой смене выбора
+    function updateTransferSummary() {
+        const summaryEl = document.getElementById('transfer-summary');
+        const currentCell = getCell(state.locId, state.blockId, state.cellIdx);
+        const animal = currentCell && currentCell.animals[state.animalIdx];
+        const cellSelect = document.getElementById('transfer-cell');
+        if (!animal || cellSelect.options.length === 0) { summaryEl.textContent = ''; return; }
+
+        const fromLoc = db.find(l => l.id === state.locId);
+        const fromBlock = fromLoc?.blocks.find(b => b.id === state.blockId);
+        const fromPos = fromBlock ? locateCellPosition(fromBlock, state.cellIdx) : null;
+        const fromAddress = fromPos ? getCellAddress(fromPos.rowIdx, fromPos.cellIdxInRow) : '?';
+
+        const targetLocId = parseInt(document.getElementById('transfer-loc').value);
+        const targetBlockId = parseInt(document.getElementById('transfer-block').value);
+        const targetCellIdx = parseInt(cellSelect.value);
+        const targetLoc = db.find(l => l.id === targetLocId);
+        const targetBlock = targetLoc?.blocks.find(b => b.id === targetBlockId);
+        const targetPos = targetBlock ? locateCellPosition(targetBlock, targetCellIdx) : null;
+        const targetAddress = targetPos ? getCellAddress(targetPos.rowIdx, targetPos.cellIdxInRow) : '?';
+
+        summaryEl.textContent = `Из: ${fromLoc?.name || '?'} / ${fromBlock?.name || '?'} / ${fromAddress} → В: ${targetLoc?.name || '?'} / ${targetBlock?.name || '?'} / ${targetAddress}`;
     }
     function executeTransfer() {
         const targetLocId = parseInt(document.getElementById('transfer-loc').value);
         const targetBlockId = parseInt(document.getElementById('transfer-block').value);
-        const targetCellIdx = parseInt(document.getElementById('transfer-cell').value);
+        const targetCellRaw = document.getElementById('transfer-cell').value;
+        if (targetCellRaw === '') { alert('В этом стеллаже нет доступных ячеек — выберите другой стеллаж или локацию.'); return; }
+        const targetCellIdx = parseInt(targetCellRaw);
+
         const currentCell = getCell(state.locId, state.blockId, state.cellIdx);
         const targetCell = getCell(targetLocId, targetBlockId, targetCellIdx);
-        
+
+        // v1.8.8: КРИТИЧЕСКИ ВАЖНЫЙ порядок — сначала проверяем, что цель реально существует, и только
+        // потом трогаем исходную ячейку. Раньше порядок был обратным (см. историю версий/баг-репорт):
+        // животное удалялось из исходной ячейки ДО этой проверки и при недоступной цели терялось безвозвратно.
+        if (!targetCell) { alert('Не удалось определить целевую ячейку. Трансфер отменён, животное осталось на месте.'); return; }
+        if (!currentCell || !currentCell.animals[state.animalIdx]) { alert('Не удалось найти особь в исходной ячейке. Трансфер отменён.'); return; }
+
         let movingAnimal = currentCell.animals.splice(state.animalIdx, 1)[0];
         targetCell.animals.push(movingAnimal);
         alert("Особь успешно переведена."); save(); closeModals();
@@ -4114,7 +4164,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.7', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.8', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
