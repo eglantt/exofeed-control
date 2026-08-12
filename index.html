@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.8</title>
+    <title>ExoFeed Control v1.8.9</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -273,7 +273,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.8-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.9-alpha | Almaty Zoo Edition</div>
 
 <div id="app"></div>
 
@@ -552,6 +552,10 @@
         <div class="form-group">
             <label>Съедено, шт (оставьте пустым, если ещё не разрешено — "оставлен на ночь")</label>
             <input type="number" id="editlog-eaten" min="0">
+        </div>
+        <div class="form-group">
+            <label>Из непойманных — погибло, шт (только для живого КО)</label>
+            <input type="number" id="editlog-died" min="0">
         </div>
         <div class="form-group">
             <label>Комментарий</label>
@@ -1382,12 +1386,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.8';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.9';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.8', 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -1416,6 +1420,17 @@
             if (log.koState === undefined) log.koState = 'prekilled';
             if (log.utilized === undefined) log.utilized = (log.status === 'Оставлен на ночь') ? null : true;
             if (log.resolvedAt === undefined) log.resolvedAt = null;
+            // v1.8.9: diedCount — сколько из НЕ съеденного погибло (только имеет смысл для живого КО).
+            // Миграция старых записей: раньше "жив/погиб" было единым бинарным флагом на весь непойманный
+            // остаток — чтобы расход КО в старых отчётах не "уменьшился" задним числом, старое "Погиб"
+            // (utilized===true при eatenCount===0 у живого КО) превращаем в diedCount = весь остаток.
+            if (log.diedCount === undefined) {
+                if (log.koState === 'live' && log.utilized === true && (log.eatenCount || 0) === 0 && log.status !== 'Оставлен на ночь') {
+                    log.diedCount = log.count - (log.eatenCount || 0);
+                } else {
+                    log.diedCount = 0;
+                }
+            }
         });
         if (!animal.shed_logs) animal.shed_logs = [];
         animal.shed_logs.forEach(log => {
@@ -2034,20 +2049,22 @@
             let nightResolveHtml = '';
             (a.feed_logs || []).forEach((log, logIdx) => {
                 if (log.status !== 'Оставлен на ночь') return;
-                const aliveQuestionId = `night-alive-wrap-${idx}-${logIdx}`;
-                const aliveOptClass = `night-alive-opt-${idx}-${logIdx}`;
-                // Вопрос "жив/погиб" нужен только для живого КО и только если съедено = 0 (тронутый/съеденный КО
-                // в любом случае утилизирован — см. resolveNightFeedCore).
-                const aliveQuestionHtml = log.koState === 'live' ? `
-                        <div id="${aliveQuestionId}" style="display:none; margin-top:6px;">
-                            <label style="font-size:0.72rem; color:var(--gold);">КО сейчас:</label>
-                            <div style="display:flex; gap:6px; margin-top:4px;">
-                                <button type="button" class="btn-opt ${aliveOptClass} active" data-val="alive" onclick="selectOpt(this, '${aliveOptClass}')" style="padding:6px 10px; font-size:0.72rem;">Жив</button>
-                                <button type="button" class="btn-opt ${aliveOptClass}" data-val="dead" onclick="selectOpt(this, '${aliveOptClass}')" style="padding:6px 10px; font-size:0.72rem;">Погиб</button>
+                const diedWrapId = `night-died-wrap-${idx}-${logIdx}`;
+                const diedInputId = `night-died-${idx}-${logIdx}`;
+                const remainingTextId = `night-remaining-${idx}-${logIdx}`;
+                // v1.8.9: раньше был бинарный вопрос "жив/погиб" на весь непойманный остаток, показанный только
+                // при съедено=0 — не позволял отразить "из 3 КО одно погибло, два выжили". Теперь — число,
+                // показывается при ЛЮБОМ непойманном остатке (съедено < предложено), не только при съедено=0.
+                const diedQuestionHtml = log.koState === 'live' ? `
+                        <div id="${diedWrapId}" style="display:none; margin-top:6px;">
+                            <label style="font-size:0.72rem; color:var(--gold);">Из непойманных — погибло, шт:</label>
+                            <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                                <input type="number" id="${diedInputId}" min="0" max="${log.count}" value="0" style="width:60px;" oninput="updateNightRemainingText(${idx}, ${logIdx}, ${log.count})">
+                                <span id="${remainingTextId}" style="font-size:0.72rem; color:#7fd6c8;"></span>
                             </div>
                         </div>` : '';
                 const aliveToggleJs = log.koState === 'live'
-                    ? `document.getElementById('${aliveQuestionId}').style.display = (parseInt(this.value)||0) === 0 ? 'block' : 'none';`
+                    ? `document.getElementById('${diedWrapId}').style.display = (parseInt(this.value)||0) < ${log.count} ? 'block' : 'none'; updateNightRemainingText(${idx}, ${logIdx}, ${log.count});`
                     : '';
                 nightResolveHtml += `
                     <div class="night-resolve-box">
@@ -2061,7 +2078,7 @@
                         <div id="night-reason-wrap-${idx}-${logIdx}" style="display:none; margin-top:6px;">
                             <textarea id="night-reason-${idx}-${logIdx}" rows="2" placeholder="Причина отказа/недоедания (необязательно)" style="width:100%; box-sizing:border-box;"></textarea>
                         </div>
-                        ${aliveQuestionHtml}
+                        ${diedQuestionHtml}
                         <textarea id="night-comment-${idx}-${logIdx}" rows="2" placeholder="Комментарий (необязательно)" style="width:100%; box-sizing:border-box; margin-top:6px;"></textarea>
                         <button class="btn-main" style="background:var(--green); padding:6px; margin-top:6px; margin-bottom:0; font-size:0.75rem;" onclick="resolveNightFeedForAnimal(${idx}, ${logIdx})">✔ Зафиксировать результат</button>
                     </div>`;
@@ -2495,6 +2512,7 @@
         document.getElementById('editlog-size').value = log.sizeNum;
         document.getElementById('editlog-count').value = log.count;
         document.getElementById('editlog-eaten').value = (log.eatenCount === null || log.eatenCount === undefined) ? '' : log.eatenCount;
+        document.getElementById('editlog-died').value = log.diedCount || 0;
         document.getElementById('editlog-comment').value = log.comment || '';
         document.querySelectorAll('.editlog-koState-opt').forEach(b => b.classList.toggle('active', b.dataset.val === (log.koState || 'prekilled')));
         showModal('modal-edit-feedlog');
@@ -2526,12 +2544,16 @@
         log.comment = document.getElementById('editlog-comment').value.trim();
         const koStateBtn = document.querySelector('.editlog-koState-opt.active');
         log.koState = koStateBtn ? koStateBtn.dataset.val : (log.koState || 'prekilled');
-        // Пересчитываем "Расход КО" под новое состояние КО/съедено — те же правила, что при обычном разрешении
-        // (см. resolveNightFeedCore): для живого КО, оставленного полностью нетронутым, форма правки не различает
-        // "жив"/"погиб" отдельно — по умолчанию считаем "жив" (не в расходе), это осознанное упрощение.
+        // v1.8.9: "Погибло" — только для живого КО, и не может быть больше непойманного остатка
+        let diedRaw = parseInt(document.getElementById('editlog-died').value);
+        if (isNaN(diedRaw) || diedRaw < 0) diedRaw = 0;
+        const eatenForDiedClamp = log.eatenCount || 0;
+        if (diedRaw > log.count - eatenForDiedClamp) diedRaw = Math.max(0, log.count - eatenForDiedClamp);
+        log.diedCount = log.koState === 'live' ? diedRaw : 0;
+        // Пересчитываем "Расход КО" под новое состояние КО/съедено/погибло — те же правила, что при обычном
+        // разрешении (см. resolveNightFeedCore).
         if (log.eatenCount !== null && log.eatenCount !== undefined) {
-            if (log.eatenCount > 0) log.utilized = true;
-            else log.utilized = log.koState !== 'live';
+            log.utilized = log.koState !== 'live' ? true : (log.eatenCount + log.diedCount) > 0;
         }
         markLogTouched(state.locId, state.blockId, state.cellIdx, editLogContext.animalIdx, editLogContext.logIdx);
         save();
@@ -2758,7 +2780,10 @@
     // Живой — утилизируется, если съеден (полностью или частично), либо если не тронут, но погиб за ночь.
     // Живой и не тронутый, переживший ночь — НЕ утилизируется: не идёт в расход, можно использовать повторно
     // для другого кормления обычной новой записью (без отдельного трекинга самого объекта КО).
-    function resolveNightFeedCore(locId, blockId, cellIdx, animalIdx, logIdx, { eaten, refusalReason, comment, aliveAfter }) {
+    // v1.8.9: diedCount — сколько из НЕ съеденного погибло за ночь (только для живого КО). Массовые кнопки
+    // утренней проверки по-прежнему передают только бинарный aliveAfter — died из него выводится, повторяя
+    // старое поведение "весь остаток погиб / весь остаток жив".
+    function resolveNightFeedCore(locId, blockId, cellIdx, animalIdx, logIdx, { eaten, refusalReason, comment, aliveAfter, died }) {
         const block = db.find(l => l.id === locId).blocks.find(b => b.id === blockId);
         if (!block) return false;
         const cell = getBlockCells(block)[cellIdx];
@@ -2769,7 +2794,15 @@
         if (isNaN(eaten) || eaten < 0) eaten = 0;
         if (eaten > log.count) eaten = log.count;
 
+        let diedCount = died;
+        if (diedCount === undefined || diedCount === null || isNaN(diedCount)) {
+            diedCount = (log.koState === 'live' && eaten === 0 && aliveAfter === false) ? (log.count - eaten) : 0;
+        }
+        if (diedCount < 0) diedCount = 0;
+        if (diedCount > log.count - eaten) diedCount = log.count - eaten;
+
         log.eatenCount = eaten;
+        log.diedCount = log.koState === 'live' ? diedCount : 0; // не живой КО — понятие "погиб" неприменимо
         log.status = eaten >= log.count ? 'Съедено' : (eaten === 0 ? 'Отказ' : 'Частично');
         log.refusalReason = eaten < log.count ? (refusalReason || '') : '';
         // v1.6.0: timestamp — момент, когда КО был предложен — больше НЕ перезаписывается. Момент фиксации результата
@@ -2777,11 +2810,25 @@
         log.resolvedAt = Date.now();
         if (comment) log.comment = comment;
 
-        if (log.koState !== 'live') log.utilized = true; // предубит/разморозка — всегда утилизирован
-        else if (eaten > 0) log.utilized = true; // живой, но тронутый/съеденный — утилизирован
-        else log.utilized = !aliveAfter; // живой и не тронутый: утилизирован, только если погиб
+        if (log.koState !== 'live') log.utilized = true; // предубит/разморозка — всегда утилизирован целиком
+        else log.utilized = (eaten + log.diedCount) > 0; // живой: расход есть, если что-то съедено ИЛИ погибло
 
         return true;
+    }
+
+    // v1.8.9: живой пересчёт "Осталось живо" при вводе съедено/погибло, заодно не даёт указать погибших больше,
+    // чем реально осталось непойманных.
+    function updateNightRemainingText(animalIdx, logIdx, count) {
+        const eatenInput = document.getElementById(`night-eaten-${animalIdx}-${logIdx}`);
+        const diedInput = document.getElementById(`night-died-${animalIdx}-${logIdx}`);
+        const remainingEl = document.getElementById(`night-remaining-${animalIdx}-${logIdx}`);
+        if (!eatenInput || !diedInput || !remainingEl) return;
+        let eaten = parseInt(eatenInput.value) || 0;
+        let died = parseInt(diedInput.value) || 0;
+        const maxDied = Math.max(0, count - eaten);
+        if (died > maxDied) { died = maxDied; diedInput.value = died; }
+        if (died < 0) { died = 0; diedInput.value = 0; }
+        remainingEl.textContent = `Осталось живо: ${count - eaten - died}`;
     }
 
     function resolveNightFeedForAnimal(animalIdx, logIdx) {
@@ -2794,10 +2841,10 @@
         let eaten = input ? parseInt(input.value) : log.count;
         if (isNaN(eaten) || eaten < 0) eaten = 0;
 
-        let aliveAfter = true; // не используется, если условие ниже не выполняется
-        if (log.koState === 'live' && eaten === 0) {
-            const deadBtn = document.querySelector(`.night-alive-opt-${animalIdx}-${logIdx}[data-val="dead"].active`);
-            aliveAfter = !deadBtn;
+        let died = 0;
+        if (log.koState === 'live' && eaten < log.count) {
+            const diedInput = document.getElementById(`night-died-${animalIdx}-${logIdx}`);
+            died = diedInput ? (parseInt(diedInput.value) || 0) : 0;
         }
 
         const reasonInput = document.getElementById(`night-reason-${animalIdx}-${logIdx}`);
@@ -2807,7 +2854,7 @@
             eaten,
             refusalReason: reasonInput ? reasonInput.value.trim() : '',
             comment: commentInput ? commentInput.value.trim() : '',
-            aliveAfter
+            died
         });
         if (!ok) return;
 
@@ -3312,7 +3359,7 @@ ${bodyHtml}
             const statusText = log.status + (log.forced ? ' (принудительно)' : '');
             const dateCell = formatLogDateTime(log.timestamp, log.date) + (log.resolvedAt ? `<div style="font-size:0.65rem; color:#888;">подтв.: ${formatLogDateTime(log.resolvedAt)}</div>` : '');
             const koStateText = KO_STATE_LABELS[log.koState] || log.koState || '—';
-            const utilizedText = log.status === 'Оставлен на ночь' ? 'Ожидает' : (log.utilized ? 'Да' : 'Нет (жив)');
+            const utilizedText = log.status === 'Оставлен на ночь' ? 'Ожидает' : formatUtilizedText_(log);
             feedRows += `<tr>
                 <td>${dateCell}</td>
                 <td>${FEED_TYPE_LABELS[log.type] || log.type} [№${log.sizeNum}] ${log.sizeTitle}</td>
@@ -3402,6 +3449,18 @@ ${bodyHtml}
     // и новым отчётом за календарную неделю (границы понедельник 00:00 — следующий понедельник 00:00).
     // Логика подсчёта — ОДНА на оба отчёта, чтобы правки (как переименование в этой же версии) не расходились
     // между местами, где раньше это же самое было продублировано.
+    // v1.8.9: текст колонки "Расход" в отчётах — раньше просто "Да"/"Нет (жив)" на всю запись; теперь для
+    // живого КО с частичной гибелью показываем точное распределение вместо грубого да/нет.
+    function formatUtilizedText_(log) {
+        if (log.koState !== 'live') return log.utilized ? 'Да' : 'Нет';
+        const eaten = log.eatenCount || 0;
+        const died = log.diedCount || 0;
+        const alive = Math.max(0, log.count - eaten - died);
+        if (died > 0 && alive > 0) return `Съедено ${eaten}, погибло ${died}, живо ${alive}`;
+        if (died > 0) return `Погибло ${died}`;
+        return log.utilized ? 'Да' : 'Нет (жив)';
+    }
+
     function aggregateFeedingData(loc, startMs, endMs) {
         let summary = {}; // по виду животного + виду/размеру КО — "кому сколько скормлено"
         let typeSummary = {}; // по виду КО целиком (Крысы/Мыши/Кролики), без разбивки по размерам
@@ -3433,14 +3492,16 @@ ${bodyHtml}
                             sizeNum: log.sizeNum, sizeTitle: log.sizeTitle,
                             count: log.count, eaten,
                             koStateText: KO_STATE_LABELS[log.koState] || log.koState || '—',
-                            utilizedText: log.status === 'Оставлен на ночь' ? 'Ожидает' : (log.utilized ? 'Да' : 'Нет (жив)'),
+                            utilizedText: log.status === 'Оставлен на ночь' ? 'Ожидает' : formatUtilizedText_(log),
                             statusText: log.status + (log.forced ? ' (принудительно)' : '')
                         });
 
                         if (log.status === 'Оставлен на ночь') return; // ещё не разрешено — не учитываем в итоговых суммах периода
-                        // "Расход КО" (было "утилизация") считается по флагу utilized, а не безусловно по count — живой,
-                        // не тронутый и переживший ночь КО в расход не идёт (переиспользуется для другого кормления).
-                        const writtenQty = log.utilized ? log.count : 0;
+                        // v1.8.9: "Расход КО" считается по факту (съедено + погибло), а не одним флагом на всю
+                        // запись — живой, не тронутый и переживший ночь КО в расход не идёт (переиспользуется),
+                        // а живой КО может быть частично съеден/частично погиб/частично пережил ночь одновременно.
+                        // Для не-живого КО (предубит/разморозка) — расход всегда весь count целиком, как и раньше.
+                        const writtenQty = log.koState !== 'live' ? (log.utilized ? log.count : 0) : (eaten + (log.diedCount || 0));
 
                         const key = `${a.species}_${log.type}_${log.sizeNum}`;
                         if (!summary[key]) summary[key] = { species: a.species, type: log.type, num: log.sizeNum, title: log.sizeTitle, eaten: 0, written: 0 };
@@ -4164,7 +4225,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.8', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.9', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
