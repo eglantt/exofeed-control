@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.9</title>
+    <title>ExoFeed Control v1.8.10</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -68,6 +68,8 @@
         }
         .pending-batch-actions { display: flex; gap: 6px; flex-shrink: 0; }
         .feedlog-pending { background: rgba(106, 27, 154, 0.22) !important; border-left: 3px solid var(--purple) !important; }
+        #global-pending-actions:empty { display: none; }
+        #global-pending-actions { padding: 0 10px; margin-top: 8px; }
         
         /* Весь стеллаж скроллится как единое целое: колонки (адреса мест) у всех рядов выровнены */
         .rack { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
@@ -273,7 +275,9 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.9-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.10-alpha | Almaty Zoo Edition</div>
+
+<div id="global-pending-actions"></div>
 
 <div id="app"></div>
 
@@ -1386,12 +1390,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.9';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.10';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.8', 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.9', 'exofeed_db_v1.8.8', 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -1627,6 +1631,113 @@
         const totalSec = Math.ceil(msLeft / 1000);
         const m = Math.floor(totalSec / 60), s = totalSec % 60;
         return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    // --- ОТМЕНА КРИТИЧЕСКИХ ИНДИВИДУАЛЬНЫХ ДЕЙСТВИЙ (v1.8.10) ---
+    // Отдельный, параллельный pendingBatches механизм — та же идея (снимок "до" + 5 минут + переживает
+    // перезапуск), но форма снимка разная для каждого вида действия (целая ячейка/стеллаж/локация/животное/
+    // кладка/переезд), поэтому не втискивается в структуру "список записей кормления" из pendingBatches.
+    const PENDING_ACTION_KEY = 'exofeed_pending_actions';
+    const PENDING_ACTION_DURATION_MS = 5 * 60 * 1000; // 5 минут — как и у pendingBatches
+    let pendingActions = [];
+    try {
+        const storedActions = JSON.parse(localStorage.getItem(PENDING_ACTION_KEY) || '[]');
+        if (Array.isArray(storedActions)) pendingActions = storedActions.filter(a => a && a.expiresAt > Date.now());
+    } catch (e) { pendingActions = []; }
+    function savePendingActions() { localStorage.setItem(PENDING_ACTION_KEY, JSON.stringify(pendingActions)); }
+    function pruneExpiredActions() {
+        const before = pendingActions.length;
+        pendingActions = pendingActions.filter(a => a.expiresAt > Date.now());
+        if (pendingActions.length !== before) savePendingActions();
+    }
+    function createPendingAction(kind, locId, blockId, label, revertData) {
+        const action = {
+            id: Date.now() + Math.random(), kind,
+            locId: locId === undefined ? null : locId, blockId: blockId === undefined ? null : blockId,
+            label, createdAt: Date.now(), expiresAt: Date.now() + PENDING_ACTION_DURATION_MS, revert: revertData
+        };
+        pendingActions.push(action);
+        savePendingActions();
+        return action;
+    }
+    // Действия, у которых стеллаж/локация ещё существуют (животное/кладка/ячейка/переезд) — показываются
+    // в шапке того стеллажа, где произошли, как и у pendingBatches.
+    function getActivePendingActionsForBlock(locId, blockId) {
+        pruneExpiredActions();
+        return pendingActions.filter(a => a.locId === locId && a.blockId === blockId);
+    }
+    // Удаление стеллажа/локации целиком — якоря для отображения больше не существует, показываем в общей
+    // плашке наверху экрана вместо шапки конкретного (уже удалённого) стеллажа.
+    function getGlobalPendingActions() {
+        pruneExpiredActions();
+        return pendingActions.filter(a => a.kind === 'delete_block' || a.kind === 'delete_location');
+    }
+    // v1.8.10: удаление стеллажа/локации целиком — якоря в виде существующего стеллажа для отображения
+    // бейджа больше нет, поэтому эти два вида действий показываются в отдельной плашке наверху экрана.
+    function renderGlobalPendingActions() {
+        const container = document.getElementById('global-pending-actions');
+        if (!container) return;
+        container.innerHTML = getGlobalPendingActions().map(act => {
+            const aIdx = pendingActions.indexOf(act);
+            return `
+                <div class="pending-batch-badge" data-action-id="${act.id}">
+                    <span>↩ ${act.label} · <span class="batch-countdown">${formatBatchCountdown(act.expiresAt)}</span></span>
+                    <span class="pending-batch-actions">
+                        <button class="btn-del" style="padding:2px 8px; font-size:0.7rem;" onclick="revertPendingAction(${aIdx})">↩ Отменить</button>
+                        <button class="btn-del" style="padding:2px 8px; font-size:0.7rem; background:var(--green);" onclick="confirmPendingAction(${aIdx})">✔</button>
+                    </span>
+                </div>`;
+        }).join('');
+    }
+    function confirmPendingAction(idx) {
+        if (!pendingActions[idx]) return;
+        pendingActions.splice(idx, 1);
+        savePendingActions();
+        render();
+    }
+    function revertPendingAction(idx) {
+        const action = pendingActions[idx];
+        if (!action) return;
+        try {
+            const r = action.revert;
+            if (action.kind === 'delete_cell') {
+                const block = db.find(l => l.id === r.locId)?.blocks.find(b => b.id === r.blockId);
+                if (block) {
+                    const row = block.rows[r.rowIdx];
+                    if (row) row.cells.splice(Math.min(r.cellIdxInRow, row.cells.length), 0, r.cellData);
+                    else block.rows.push({ cells: [r.cellData] });
+                }
+            } else if (action.kind === 'delete_block') {
+                const loc = db.find(l => l.id === r.locId);
+                if (loc) loc.blocks.splice(Math.min(r.blockIndex, loc.blocks.length), 0, r.blockData);
+            } else if (action.kind === 'delete_location') {
+                db.splice(Math.min(r.locIndex, db.length), 0, r.locData);
+            } else if (action.kind === 'archive_animal') {
+                archiveDb = archiveDb.filter(rec => rec.id !== r.archiveRecordId);
+                saveArchive();
+                const block = db.find(l => l.id === r.locId)?.blocks.find(b => b.id === r.blockId);
+                const cell = block ? getBlockCells(block)[r.cellIdx] : null;
+                if (cell) cell.animals.splice(Math.min(r.animalIdx, cell.animals.length), 0, r.animalData);
+            } else if (action.kind === 'archive_clutch') {
+                clutchArchiveDb = clutchArchiveDb.filter(rec => rec.id !== r.archiveRecordId);
+                saveClutchArchive();
+                const block = db.find(l => l.id === r.locId)?.blocks.find(b => b.id === r.blockId);
+                const cell = block ? getBlockCells(block)[r.cellIdx] : null;
+                if (cell) cell.clutches.splice(Math.min(r.clutchIdx, cell.clutches.length), 0, r.clutchData);
+            } else if (action.kind === 'transfer_animal') {
+                const targetBlock = db.find(l => l.id === r.targetLocId)?.blocks.find(b => b.id === r.targetBlockId);
+                const targetCell = targetBlock ? getBlockCells(targetBlock)[r.targetCellIdx] : null;
+                if (targetCell && targetCell.animals[r.targetAnimalIdx]) targetCell.animals.splice(r.targetAnimalIdx, 1);
+                const sourceBlock = db.find(l => l.id === r.sourceLocId)?.blocks.find(b => b.id === r.sourceBlockId);
+                const sourceCell = sourceBlock ? getBlockCells(sourceBlock)[r.sourceCellIdx] : null;
+                if (sourceCell) sourceCell.animals.splice(Math.min(r.sourceAnimalIdx, sourceCell.animals.length), 0, r.animalData);
+            }
+        } catch (e) {
+            alert('Не удалось отменить действие — структура могла измениться за это время.');
+        }
+        pendingActions.splice(idx, 1);
+        savePendingActions();
+        save();
     }
 
     function saveArchive() {
@@ -1883,9 +1994,17 @@
             : hasClutches ? "В ячейке есть кладки! Удалить ячейку вместе с ними?"
             : "Удалить эту ячейку?";
         if (!confirm(msg)) return;
-        for (const row of block.rows) {
-            const idx = row.cells.indexOf(cell);
-            if (idx !== -1) { row.cells.splice(idx, 1); break; }
+        let removedRowIdx = -1, removedIdxInRow = -1;
+        for (let rIdx = 0; rIdx < block.rows.length; rIdx++) {
+            const idx = block.rows[rIdx].cells.indexOf(cell);
+            if (idx !== -1) { removedRowIdx = rIdx; removedIdxInRow = idx; block.rows[rIdx].cells.splice(idx, 1); break; }
+        }
+        if (removedRowIdx !== -1) {
+            const address = getCellAddress(removedRowIdx, removedIdxInRow);
+            createPendingAction('delete_cell', state.locId, state.blockId, `Удалена ячейка ${address} (${block.name})`, {
+                locId: state.locId, blockId: state.blockId, rowIdx: removedRowIdx, cellIdxInRow: removedIdxInRow,
+                cellData: JSON.parse(JSON.stringify(cell))
+            });
         }
         save(); closeModals();
     }
@@ -2425,15 +2544,21 @@
         const c = cell.clutches[state.clutchIdx];
         const pos = locateCellPosition(block, state.cellIdx);
         const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+        const clutchSnapshot = JSON.parse(JSON.stringify(c)); // отсоединяем от живой базы полной копией
+        const archiveId = Date.now() + Math.random();
         clutchArchiveDb.push({
-            id: Date.now() + Math.random(),
-            clutch: JSON.parse(JSON.stringify(c)), // отсоединяем от живой базы полной копией
+            id: archiveId,
+            clutch: clutchSnapshot,
             reason: c.status === 'hatched' ? 'Вылупилась' : (c.status === 'died' ? 'Погибла' : 'Завершена'),
             archivedAt: Date.now(),
             originLocName: loc.name, originBlockName: block.name, originAddress: address
         });
         saveClutchArchive();
         cell.clutches.splice(state.clutchIdx, 1);
+        createPendingAction('archive_clutch', state.locId, state.blockId, `В архив: кладка ${clutchSpeciesLabel(c)} (${block.name}, ${address})`, {
+            archiveRecordId: archiveId, locId: state.locId, blockId: state.blockId, cellIdx: state.cellIdx,
+            clutchIdx: state.clutchIdx, clutchData: clutchSnapshot
+        });
         save(); closeModals(); openCell(state.locId, state.blockId, state.cellIdx);
     }
 
@@ -3210,8 +3335,21 @@
         if (!targetCell) { alert('Не удалось определить целевую ячейку. Трансфер отменён, животное осталось на месте.'); return; }
         if (!currentCell || !currentCell.animals[state.animalIdx]) { alert('Не удалось найти особь в исходной ячейке. Трансфер отменён.'); return; }
 
+        const sourceLocId = state.locId, sourceBlockId = state.blockId, sourceCellIdx = state.cellIdx, sourceAnimalIdx = state.animalIdx;
+        const animalSnapshot = JSON.parse(JSON.stringify(currentCell.animals[state.animalIdx]));
         let movingAnimal = currentCell.animals.splice(state.animalIdx, 1)[0];
         targetCell.animals.push(movingAnimal);
+        const targetAnimalIdx = targetCell.animals.length - 1;
+
+        const sourceLoc = db.find(l => l.id === sourceLocId), sourceBlock = sourceLoc?.blocks.find(b => b.id === sourceBlockId);
+        const targetLoc = db.find(l => l.id === targetLocId), targetBlock = targetLoc?.blocks.find(b => b.id === targetBlockId);
+        createPendingAction('transfer_animal', targetLocId, targetBlockId,
+            `Переезд: ${movingAnimal.species} (${sourceLoc?.name}/${sourceBlock?.name} → ${targetLoc?.name}/${targetBlock?.name})`, {
+                sourceLocId, sourceBlockId, sourceCellIdx, sourceAnimalIdx,
+                targetLocId, targetBlockId, targetCellIdx, targetAnimalIdx,
+                animalData: animalSnapshot
+            });
+
         alert("Особь успешно переведена."); save(); closeModals();
     }
 
@@ -3756,6 +3894,7 @@ ${bodyHtml}
     function updateUIElements() { document.querySelectorAll('.edit-ui').forEach(el => el.style.display = isLocked ? 'none' : 'block'); }
 
     function render() {
+        renderGlobalPendingActions();
         const app = document.getElementById('app');
         // v1.5.10: перед полной перестройкой DOM запоминаем, насколько был прокручен каждый стеллаж
         // (сама перерисовка создаёт все элементы заново, включая .rack — без этого скролл всегда сбрасывался в 0)
@@ -3848,6 +3987,17 @@ ${bodyHtml}
                                     <span class="pending-batch-actions">
                                         <button class="btn-del" style="padding:2px 8px; font-size:0.7rem;" onclick="revertPendingBatch(${bIdx})">↩ Отменить</button>
                                         <button class="btn-del" style="padding:2px 8px; font-size:0.7rem; background:var(--green);" onclick="confirmPendingBatch(${bIdx})">✔</button>
+                                    </span>
+                                </div>`;
+                            }).join('')}
+                            ${getActivePendingActionsForBlock(loc.id, block.id).map(act => {
+                                const aIdx = pendingActions.indexOf(act);
+                                return `
+                                <div class="pending-batch-badge" data-action-id="${act.id}">
+                                    <span>↩ ${act.label} · <span class="batch-countdown">${formatBatchCountdown(act.expiresAt)}</span></span>
+                                    <span class="pending-batch-actions">
+                                        <button class="btn-del" style="padding:2px 8px; font-size:0.7rem;" onclick="revertPendingAction(${aIdx})">↩ Отменить</button>
+                                        <button class="btn-del" style="padding:2px 8px; font-size:0.7rem; background:var(--green);" onclick="confirmPendingAction(${aIdx})">✔</button>
                                     </span>
                                 </div>`;
                             }).join('')}
@@ -3977,8 +4127,30 @@ ${bodyHtml}
         }
     }
 
-    function deleteLoc(id) { if(confirm("Удалить локацию?")) { db = db.filter(l => l.id !== id); collapsedLocs.delete(id); saveCollapsedState(); save(); } }
-    function deleteBlock(lId, bId) { if(confirm("Удалить стеллаж?")) { const loc = db.find(l => l.id === lId); loc.blocks = loc.blocks.filter(b => b.id !== bId); save(); } }
+    function deleteLoc(id) {
+        if (!confirm("Удалить локацию?")) return;
+        const idx = db.findIndex(l => l.id === id);
+        if (idx === -1) return;
+        const locData = db[idx];
+        db = db.filter(l => l.id !== id);
+        collapsedLocs.delete(id); saveCollapsedState();
+        createPendingAction('delete_location', null, null, `Удалена локация «${locData.name}»`, {
+            locIndex: idx, locData: JSON.parse(JSON.stringify(locData))
+        });
+        save();
+    }
+    function deleteBlock(lId, bId) {
+        if (!confirm("Удалить стеллаж?")) return;
+        const loc = db.find(l => l.id === lId);
+        const idx = loc.blocks.findIndex(b => b.id === bId);
+        if (idx === -1) return;
+        const blockData = loc.blocks[idx];
+        loc.blocks.splice(idx, 1);
+        createPendingAction('delete_block', lId, null, `Удалён стеллаж «${blockData.name}» (${loc.name})`, {
+            locId: lId, blockIndex: idx, blockData: JSON.parse(JSON.stringify(blockData))
+        });
+        save();
+    }
     // --- Архивирование при выбытии животного (v1.5.6): вместо безвозвратного удаления ---
     function openRemoveAnimalModal(idx) {
         state.animalIdx = idx;
@@ -4001,10 +4173,12 @@ ${bodyHtml}
         const animal = cell.animals[state.animalIdx];
         const pos = locateCellPosition(block, state.cellIdx);
         const address = pos ? getCellAddress(pos.rowIdx, pos.cellIdxInRow) : '?';
+        const animalSnapshot = JSON.parse(JSON.stringify(animal)); // отсоединяем от живой базы полной копией
+        const archiveId = Date.now() + Math.random();
 
         archiveDb.push({
-            id: Date.now() + Math.random(),
-            animal: JSON.parse(JSON.stringify(animal)), // отсоединяем от живой базы полной копией
+            id: archiveId,
+            animal: animalSnapshot,
             reason: reason,
             reasonText: reasonText,
             archivedAt: Date.now(),
@@ -4015,6 +4189,10 @@ ${bodyHtml}
         saveArchive();
 
         cell.animals.splice(state.animalIdx, 1);
+        createPendingAction('archive_animal', state.locId, state.blockId, `В архив: ${animal.species} (${block.name}, ${address})`, {
+            archiveRecordId: archiveId, locId: state.locId, blockId: state.blockId, cellIdx: state.cellIdx,
+            animalIdx: state.animalIdx, animalData: animalSnapshot
+        });
         save();
         closeModals();
         openCell(state.locId, state.blockId, state.cellIdx);
@@ -4225,7 +4403,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.9', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.10', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
@@ -4301,10 +4479,12 @@ ${bodyHtml}
         archiveDb = [];
         clutchArchiveDb = [];
         pendingBatches = [];
+        pendingActions = [];
         localStorage.removeItem(CURRENT_DB_KEY);
         saveArchive();
         saveClutchArchive();
         savePendingBatches();
+        savePendingActions();
         save();
         alert("База данных полностью очищена.");
     }
@@ -4325,16 +4505,26 @@ ${bodyHtml}
     // v1.8.7: лёгкое обновление отсчёта у бейджей отмены — без полной перерисовки экрана (только текст).
     // Если какой-то пакет истёк — один раз перерисовываем целиком, чтобы бейдж/подсветка пропали.
     function tickPendingBatchCountdowns() {
-        if (pendingBatches.length === 0) return;
-        let expired = false;
+        if (pendingBatches.length === 0 && pendingActions.length === 0) return;
+        let expiredBatch = false, expiredAction = false;
         document.querySelectorAll('.pending-batch-badge').forEach(el => {
-            const batch = pendingBatches.find(b => String(b.id) === el.dataset.batchId);
-            if (!batch) return;
-            if (batch.expiresAt <= Date.now()) { expired = true; return; }
-            const span = el.querySelector('.batch-countdown');
-            if (span) span.textContent = formatBatchCountdown(batch.expiresAt);
+            if (el.dataset.batchId !== undefined) {
+                const batch = pendingBatches.find(b => String(b.id) === el.dataset.batchId);
+                if (!batch) return;
+                if (batch.expiresAt <= Date.now()) { expiredBatch = true; return; }
+                const span = el.querySelector('.batch-countdown');
+                if (span) span.textContent = formatBatchCountdown(batch.expiresAt);
+            } else if (el.dataset.actionId !== undefined) {
+                const action = pendingActions.find(a => String(a.id) === el.dataset.actionId);
+                if (!action) return;
+                if (action.expiresAt <= Date.now()) { expiredAction = true; return; }
+                const span = el.querySelector('.batch-countdown');
+                if (span) span.textContent = formatBatchCountdown(action.expiresAt);
+            }
         });
-        if (expired) { pruneExpiredBatches(); render(); }
+        if (expiredBatch) pruneExpiredBatches();
+        if (expiredAction) pruneExpiredActions();
+        if (expiredBatch || expiredAction) render();
     }
     tickClock();
     setInterval(tickClock, 1000);
