@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.10</title>
+    <title>ExoFeed Control v1.8.11</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -205,6 +205,15 @@
         table.rep-table { border-collapse: collapse; width: 100%; margin-bottom: 14px; font-size: 0.78rem; }
         table.rep-table th, table.rep-table td { border: 1px solid #444; padding: 5px 7px; text-align: left; }
         table.rep-table th { background: #2a2a2a; color: #aaa; }
+        /* v1.8.11: тёмная версия стилей карты расселения — для превью внутри modal-report; печатная/скачиваемая
+           версия стилизована отдельно (светлая тема) внутри wrapReportDocument() */
+        .res-map-row { margin: 10px 0 18px; }
+        .res-map-row-title { font-weight: bold; color: var(--gold); margin-bottom: 6px; }
+        .res-map-cells { display: flex; flex-wrap: wrap; gap: 8px; }
+        .res-map-cell { border: 1px solid #555; border-radius: 4px; padding: 6px 8px; min-width: 100px; font-size: 0.75rem; background: #222; }
+        .res-map-cell .addr { font-weight: bold; color: var(--blue); display: block; margin-bottom: 2px; }
+        .res-map-cell.service { background: #2a2a2a; color: #888; font-style: italic; }
+        .res-map-cell .occupant { margin-top: 2px; color: #ddd; }
 
         /* --- Календарь (v1.5.2) --- */
         .cal-month-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
@@ -275,7 +284,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.10-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.11-alpha | Almaty Zoo Edition</div>
 
 <div id="global-pending-actions"></div>
 
@@ -769,6 +778,7 @@
     <div onclick="openGlobalSearch()" class="nav-item">🔍 Поиск</div>
     <div onclick="openArchive()" class="nav-item">📁 Архив</div>
     <div onclick="openIncubationReport()" class="nav-item">🥚 Инкубация</div>
+    <div onclick="openResidentMapReportAll()" class="nav-item">🗺 Карта (вся коллекция)</div>
     <div onclick="triggerImport()" class="nav-item">📂 Импорт</div>
     <div onclick="exportData()" class="nav-item">💾 Бэкап</div>
     <div onclick="wipeDatabase()" class="nav-item edit-ui" style="color:var(--red);">🗑️ Очистить БД</div>
@@ -1390,12 +1400,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.10';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.11';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.9', 'exofeed_db_v1.8.8', 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.10', 'exofeed_db_v1.8.9', 'exofeed_db_v1.8.8', 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -3435,7 +3445,8 @@
         const container = document.getElementById('stats-data');
         if(Object.keys(summary).length === 0 && journalRowsHtml === '') { 
             container.innerHTML = '<p>В этой комнате еще нет записей о съеденных кормах.</p>'
-                + `<button class="btn-main" style="background:#00838f; margin-top:10px;" onclick="openTemperatureReport(${locId})">🌡 Отчёт по температуре (HTML)</button>`;
+                + `<button class="btn-main" style="background:#00838f; margin-top:10px;" onclick="openTemperatureReport(${locId})">🌡 Отчёт по температуре (HTML)</button>`
+                + `<button class="btn-main" style="background:#37474f;" onclick="openResidentMapReport(${locId})">🗺 Карта расселения (HTML)</button>`;
         } else {
             let html = `<h5 style="color:var(--blue); margin-bottom:5px;">📊 1. Сводный расход КО по типам</h5>`;
             html += '<table class="stat-table"><thead><tr><th>Размер КО</th><th>Кол-во</th><th>Биомасса</th></tr></thead><tbody>';
@@ -3458,6 +3469,7 @@
             html += `<button class="btn-main" style="background:#37474f;" onclick="openCalendarWeekReport(${locId})">🗓️ Отчёт за календарную неделю (HTML)</button>`;
             html += `<button class="btn-main" style="background:#37474f;" onclick="openFullLocationReport(${locId})">📚 Полный отчёт по всем животным (HTML)</button>`;
             html += `<button class="btn-main" style="background:#00838f;" onclick="openTemperatureReport(${locId})">🌡 Отчёт по температуре (HTML)</button>`;
+            html += `<button class="btn-main" style="background:#37474f;" onclick="openResidentMapReport(${locId})">🗺 Карта расселения (HTML)</button>`;
             container.innerHTML = html;
         }
         showModal('modal-stats');
@@ -3482,6 +3494,17 @@
     table.rep-table th,table.rep-table td{border:1px solid #ccc;padding:6px 8px;text-align:left;}
     table.rep-table th{background:#f0f0f0;}
     .meta{color:#777;font-size:0.85rem;margin-bottom:20px;}
+    /* v1.8.11: карта расселения — ячейки одного ряда сами переносятся по ширине страницы, ряды никогда
+       не смешиваются между собой (каждый ряд — свой блок с подписью, перенос только внутри него) */
+    .res-map-row { margin: 10px 0 22px; }
+    .res-map-row-title { font-weight: bold; color: #37474f; margin-bottom: 6px; }
+    .res-map-cells { display: flex; flex-wrap: wrap; gap: 8px; }
+    .res-map-cell { border: 1px solid #999; border-radius: 4px; padding: 6px 8px; min-width: 110px; font-size: 0.78rem; break-inside: avoid; }
+    .res-map-cell .addr { font-weight: bold; color: #1976d2; display: block; margin-bottom: 2px; }
+    .res-map-cell.service { background: #eee; color: #888; font-style: italic; }
+    .res-map-cell .occupant { margin-top: 2px; }
+    .loc-section { page-break-before: always; }
+    .loc-section:first-of-type { page-break-before: auto; }
 </style></head><body>
 <h1>${title}</h1>
 <div class="meta">Сформировано: ${new Date().toLocaleString('ru-RU')}</div>
@@ -3844,6 +3867,80 @@ ${bodyHtml}
 
     // Полный отчёт по всем животным локации сразу (вся история кормлений и линек каждой особи)
     // v1.8.6: отчёт по температурному режиму локации — показания ячеек + фоновая температура самой локации вместе
+    // v1.8.11: "Карта расселения" — визуальная карта ячеек по рядам (кто где физически сидит) + список
+    // животных под ней. Общий строитель под оба входа (одна локация / вся коллекция), чтобы не разъезжались.
+    function buildResidentMapLocationHtml(loc) {
+        let blockCount = 0, totalCells = 0, occupiedCells = 0, animalCount = 0;
+        let mapHtml = '';
+        let animalRows = [];
+
+        loc.blocks.forEach(block => {
+            if (block.type === INCUBATOR_BLOCK_TYPE) return; // карта расселения — про животных, не про кладки
+            blockCount++;
+            mapHtml += `<h3>${block.name}</h3>`;
+            (block.rows || []).forEach((row, rIdx) => {
+                mapHtml += `<div class="res-map-row"><div class="res-map-row-title">Ряд ${rIdx + 1}</div><div class="res-map-cells">`;
+                (row.cells || []).forEach((cell, cIdx) => {
+                    const address = getCellAddress(rIdx, cIdx);
+                    if (cell.isService) {
+                        mapHtml += `<div class="res-map-cell service"><span class="addr">${address}</span>служебное</div>`;
+                        return;
+                    }
+                    totalCells++;
+                    const animals = cell.animals || [];
+                    if (animals.length > 0) {
+                        occupiedCells++;
+                        animalCount += animals.length;
+                        animals.forEach(a => animalRows.push({ block: block.name, address, species: a.species, gender: a.gender, age: a.age }));
+                    }
+                    const occupantsHtml = animals.map(a => `<div class="occupant">${a.species} ${a.gender}</div>`).join('');
+                    mapHtml += `<div class="res-map-cell"><span class="addr">${address}</span>${occupantsHtml}</div>`;
+                });
+                mapHtml += `</div></div>`;
+            });
+        });
+
+        const animalTableRows = animalRows.map(r =>
+            `<tr><td>${r.block}</td><td>${r.address}</td><td>${r.species}</td><td>${r.gender}</td><td>${r.age || '—'}</td></tr>`
+        ).join('');
+
+        const html = `
+            <div class="loc-section">
+                <h2>${loc.name}</h2>
+                <p><b>Стеллажей:</b> ${blockCount} &nbsp; <b>Занято ячеек:</b> ${occupiedCells} из ${totalCells} &nbsp; <b>Животных:</b> ${animalCount}</p>
+                ${mapHtml || '<p>Стеллажей с животными нет.</p>'}
+                <h3>Список животных</h3>
+                <table class="rep-table">
+                    <thead><tr><th>Стеллаж</th><th>Ячейка</th><th>Вид</th><th>Пол</th><th>Возраст</th></tr></thead>
+                    <tbody>${animalTableRows || '<tr><td colspan="5">Животных нет</td></tr>'}</tbody>
+                </table>
+            </div>`;
+        return { html, stats: { blockCount, totalCells, occupiedCells, animalCount } };
+    }
+
+    function openResidentMapReport(locId) {
+        const loc = db.find(l => l.id === locId);
+        if (!loc) return;
+        const result = buildResidentMapLocationHtml(loc);
+        showReportModal(`Карта расселения — ${loc.name}`, result.html, `map_${loc.name}_${new Date().toISOString().slice(0, 10)}.html`);
+    }
+
+    function openResidentMapReportAll() {
+        let overviewRows = '';
+        let bodyHtml = '';
+        db.forEach(loc => {
+            const result = buildResidentMapLocationHtml(loc);
+            overviewRows += `<tr><td>${loc.name}</td><td>${result.stats.blockCount}</td><td>${result.stats.occupiedCells} из ${result.stats.totalCells}</td><td>${result.stats.animalCount}</td></tr>`;
+            bodyHtml += result.html;
+        });
+        const overviewHtml = `
+            <table class="rep-table">
+                <thead><tr><th>Локация</th><th>Стеллажей</th><th>Занято ячеек</th><th>Животных</th></tr></thead>
+                <tbody>${overviewRows || '<tr><td colspan="4">Локаций нет</td></tr>'}</tbody>
+            </table>`;
+        showReportModal('Карта расселения — вся коллекция', overviewHtml + bodyHtml, `map_all_${new Date().toISOString().slice(0, 10)}.html`);
+    }
+
     function openTemperatureReport(locId) {
         const loc = db.find(l => l.id === locId);
         let rows = [];
@@ -4403,7 +4500,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.10', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.11', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
