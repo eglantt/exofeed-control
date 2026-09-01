@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.14</title>
+    <title>ExoFeed Control v1.8.15</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -293,7 +293,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.14-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.15-alpha | Almaty Zoo Edition</div>
 
 <div id="global-pending-actions"></div>
 
@@ -799,7 +799,7 @@
     <div onclick="openIncubationReport()" class="nav-item">🥚 Инкубация</div>
     <div onclick="openResidentMapReportAll()" class="nav-item">🗺 Карта (вся коллекция)</div>
     <div onclick="openKONeedReportAll()" class="nav-item">📦 Потребность в КО</div>
-    <div onclick="openTypicalPortionReport(null)" class="nav-item">📦 Типичная порция</div>
+    <div onclick="openEatingStatsReport(null)" class="nav-item">📈 Статистика поедаемости</div>
     <div onclick="triggerImport()" class="nav-item">📂 Импорт</div>
     <div onclick="exportData()" class="nav-item">💾 Бэкап</div>
     <div onclick="wipeDatabase()" class="nav-item edit-ui" style="color:var(--red);">🗑️ Очистить БД</div>
@@ -1421,12 +1421,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.14';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.15';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.13', 'exofeed_db_v1.8.12', 'exofeed_db_v1.8.11', 'exofeed_db_v1.8.10', 'exofeed_db_v1.8.9', 'exofeed_db_v1.8.8', 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.14', 'exofeed_db_v1.8.13', 'exofeed_db_v1.8.12', 'exofeed_db_v1.8.11', 'exofeed_db_v1.8.10', 'exofeed_db_v1.8.9', 'exofeed_db_v1.8.8', 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -3469,7 +3469,7 @@
                 + `<button class="btn-main" style="background:#00838f; margin-top:10px;" onclick="openTemperatureReport(${locId})">🌡 Отчёт по температуре (HTML)</button>`
                 + `<button class="btn-main" style="background:#37474f;" onclick="openResidentMapReport(${locId})">🗺 Карта расселения (HTML)</button>`
                 + `<button class="btn-main" style="background:#6a1b9a;" onclick="openKONeedReport(${locId})">📦 Потребность в КО (HTML)</button>`
-                + `<button class="btn-main" style="background:#6a1b9a;" onclick="openTypicalPortionReport(${locId})">📦 Типичная порция (HTML)</button>`;
+                + `<button class="btn-main" style="background:#6a1b9a;" onclick="openEatingStatsReport(${locId})">📈 Статистика поедаемости (HTML)</button>`;
         } else {
             let html = `<h5 style="color:var(--blue); margin-bottom:5px;">📊 1. Сводный расход КО по типам</h5>`;
             html += '<table class="stat-table"><thead><tr><th>Размер КО</th><th>Кол-во</th><th>Биомасса</th></tr></thead><tbody>';
@@ -3494,7 +3494,7 @@
             html += `<button class="btn-main" style="background:#00838f;" onclick="openTemperatureReport(${locId})">🌡 Отчёт по температуре (HTML)</button>`;
             html += `<button class="btn-main" style="background:#37474f;" onclick="openResidentMapReport(${locId})">🗺 Карта расселения (HTML)</button>`;
             html += `<button class="btn-main" style="background:#6a1b9a;" onclick="openKONeedReport(${locId})">📦 Потребность в КО (HTML)</button>`;
-            html += `<button class="btn-main" style="background:#6a1b9a;" onclick="openTypicalPortionReport(${locId})">📦 Типичная порция (HTML)</button>`;
+            html += `<button class="btn-main" style="background:#6a1b9a;" onclick="openEatingStatsReport(${locId})">📈 Статистика поедаемости (HTML)</button>`;
             container.innerHTML = html;
         }
         showModal('modal-stats');
@@ -3987,9 +3987,11 @@ ${bodyHtml}
 
     // Считает ПРЕДЛОЖЕННОЕ количество (log.count) в диапазоне дат, включая ещё не разрешённые
     // "Оставлен на ночь" — в отличие от aggregateFeedingData(), который их из сводки исключает и
-    // считает съедено/расход, а не то, сколько физически выдали.
+    // считает съедено/расход, а не то, сколько физически выдали. Только по типу+размеру КО —
+    // без разбивки по видам животных (v1.8.15: убрано по прямому запросу — для этого отчёта нужны
+    // только цифры по размерной сетке КО, не "кто сколько съел").
     function aggregateOfferedKO(loc, startMs, endMs) {
-        let bySpecies = {}, byTypeSize = {};
+        let byTypeSize = {};
         loc.blocks.forEach(block => {
             if (block.type === INCUBATOR_BLOCK_TYPE) return;
             getBlockCells(block).forEach(cell => {
@@ -4001,46 +4003,27 @@ ${bodyHtml}
                         const key = `${log.type}_${log.sizeNum}`;
                         if (!byTypeSize[key]) byTypeSize[key] = { type: log.type, num: log.sizeNum, title: log.sizeTitle, offered: 0 };
                         byTypeSize[key].offered += log.count;
-                        if (!bySpecies[a.species]) bySpecies[a.species] = {};
-                        if (!bySpecies[a.species][key]) bySpecies[a.species][key] = { type: log.type, num: log.sizeNum, title: log.sizeTitle, offered: 0 };
-                        bySpecies[a.species][key].offered += log.count;
                     });
                 });
             });
         });
-        return { bySpecies, byTypeSize };
+        return byTypeSize;
     }
 
     function sortTypeSizeEntries_(entries) {
         return entries.sort((a, b) => (a.type || '').localeCompare(b.type || '') || (a.num - b.num));
     }
 
-    function buildKONeedLocationHtml(loc, startMs, endMs, weeks) {
-        const { bySpecies, byTypeSize } = aggregateOfferedKO(loc, startMs, endMs);
-        let speciesRows = '';
-        Object.keys(bySpecies).sort().forEach(species => {
-            sortTypeSizeEntries_(Object.values(bySpecies[species])).forEach(r => {
-                speciesRows += `<tr><td>${species}</td><td>${FEED_TYPE_LABELS[r.type] || r.type}</td><td>№${r.num} ${r.title}</td><td>${r.offered}</td><td>${(r.offered / weeks).toFixed(1)}</td></tr>`;
-            });
-        });
-        let totalRows = '';
-        sortTypeSizeEntries_(Object.values(byTypeSize)).forEach(r => {
-            totalRows += `<tr><td>${FEED_TYPE_LABELS[r.type] || r.type}</td><td>№${r.num} ${r.title}</td><td>${r.offered}</td><td>${(r.offered / weeks).toFixed(1)}</td></tr>`;
+    function renderKOTypeSizeTable_(byTypeSizeObj, weeks) {
+        let rows = '';
+        sortTypeSizeEntries_(Object.values(byTypeSizeObj)).forEach(r => {
+            rows += `<tr><td>${FEED_TYPE_LABELS[r.type] || r.type}</td><td>№${r.num} ${r.title}</td><td>${r.offered}</td><td>${(r.offered / weeks).toFixed(1)}</td></tr>`;
         });
         return `
-            <div class="loc-section">
-                <h2>${loc.name}</h2>
-                <h3>По видам животных</h3>
-                <table class="rep-table">
-                    <thead><tr><th>Вид</th><th>Тип КО</th><th>Размер</th><th>Предложено за период</th><th>В неделю (сред.)</th></tr></thead>
-                    <tbody>${speciesRows || '<tr><td colspan="5">Нет данных</td></tr>'}</tbody>
-                </table>
-                <h3>Итого по локации (для закупки)</h3>
-                <table class="rep-table">
-                    <thead><tr><th>Тип КО</th><th>Размер</th><th>Предложено за период</th><th>В неделю (сред.)</th></tr></thead>
-                    <tbody>${totalRows || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
-                </table>
-            </div>`;
+            <table class="rep-table">
+                <thead><tr><th>Тип КО</th><th>Размер</th><th>Предложено за период</th><th>В неделю (сред.)</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
+            </table>`;
     }
 
     let koNeedReportLocId = null; // null = вся коллекция сразу
@@ -4061,39 +4044,31 @@ ${bodyHtml}
         closeModals();
 
         if (koNeedReportLocId !== null) {
+            // Одна локация — одна таблица по типу/размеру КО, без разбивки по видам
             const loc = db.find(l => l.id === koNeedReportLocId);
             if (!loc) return;
-            const bodyHtml = `<p class="meta">${periodLabel}</p>` + buildKONeedLocationHtml(loc, startMs, endMs, weeks);
+            const byTypeSize = aggregateOfferedKO(loc, startMs, endMs);
+            const bodyHtml = `<p class="meta">${periodLabel}</p>` + renderKOTypeSizeTable_(byTypeSize, weeks);
             showReportModal(`Потребность в КО — ${loc.name}`, bodyHtml, `ko_need_${loc.name}_${toDateStr(new Date())}.html`);
         } else {
-            let allBodyHtml = '';
+            // Вся коллекция — ОДИН общий итог по типу/размеру КО, без разбивки по локациям
+            // (v1.8.15: убрана разбивка по локациям по прямому запросу)
             let grandTotal = {};
             db.forEach(loc => {
-                allBodyHtml += buildKONeedLocationHtml(loc, startMs, endMs, weeks);
-                const { byTypeSize } = aggregateOfferedKO(loc, startMs, endMs);
+                const byTypeSize = aggregateOfferedKO(loc, startMs, endMs);
                 Object.values(byTypeSize).forEach(r => {
                     const key = `${r.type}_${r.num}`;
                     if (!grandTotal[key]) grandTotal[key] = { type: r.type, num: r.num, title: r.title, offered: 0 };
                     grandTotal[key].offered += r.offered;
                 });
             });
-            let grandRows = '';
-            sortTypeSizeEntries_(Object.values(grandTotal)).forEach(r => {
-                grandRows += `<tr><td>${FEED_TYPE_LABELS[r.type] || r.type}</td><td>№${r.num} ${r.title}</td><td>${r.offered}</td><td>${(r.offered / weeks).toFixed(1)}</td></tr>`;
-            });
-            const grandHtml = `
-                <h2>Итого по всей коллекции (для закупки)</h2>
-                <table class="rep-table">
-                    <thead><tr><th>Тип КО</th><th>Размер</th><th>Предложено за период</th><th>В неделю (сред.)</th></tr></thead>
-                    <tbody>${grandRows || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
-                </table>`;
-            const bodyHtml = `<p class="meta">${periodLabel}</p>` + grandHtml + allBodyHtml;
+            const bodyHtml = `<p class="meta">${periodLabel}</p>` + renderKOTypeSizeTable_(grandTotal, weeks);
             showReportModal('Потребность в КО — вся коллекция', bodyHtml, `ko_need_all_${toDateStr(new Date())}.html`);
         }
     }
 
-    // --- Типичная порция: последние (до) N кормлений на КАЖДОЕ животное отдельно, без привязки ко времени ---
-    function aggregateTypicalPortion(loc, n) {
+    // --- Статистика поедаемости: последние (до) N кормлений на КАЖДОЕ животное отдельно, без привязки ко времени ---
+    function aggregateEatingStats(loc, n) {
         let bySpecies = {}, eventsBySpecies = {}, byTypeSizeSum = {}, totalEvents = 0;
         loc.blocks.forEach(block => {
             if (block.type === INCUBATOR_BLOCK_TYPE) return;
@@ -4120,8 +4095,8 @@ ${bodyHtml}
         return { bySpecies, eventsBySpecies, byTypeSizeSum, totalEvents };
     }
 
-    function buildTypicalPortionLocationHtml(loc) {
-        const { bySpecies, eventsBySpecies } = aggregateTypicalPortion(loc, 4);
+    function buildEatingStatsLocationHtml(loc) {
+        const { bySpecies, eventsBySpecies } = aggregateEatingStats(loc, 4);
         let speciesRows = '';
         Object.keys(bySpecies).sort().forEach(species => {
             const events = eventsBySpecies[species] || 0;
@@ -4140,18 +4115,18 @@ ${bodyHtml}
             </div>`;
     }
 
-    function openTypicalPortionReport(locId) {
+    function openEatingStatsReport(locId) {
         if (locId !== null) {
             const loc = db.find(l => l.id === locId);
             if (!loc) return;
-            showReportModal(`Типичная порция — ${loc.name}`, buildTypicalPortionLocationHtml(loc), `typical_portion_${loc.name}_${toDateStr(new Date())}.html`);
+            showReportModal(`Статистика поедаемости — ${loc.name}`, buildEatingStatsLocationHtml(loc), `eating_stats_${loc.name}_${toDateStr(new Date())}.html`);
             return;
         }
         let allBodyHtml = '';
         let grandSum = {}, grandEvents = 0;
         db.forEach(loc => {
-            allBodyHtml += buildTypicalPortionLocationHtml(loc);
-            const { byTypeSizeSum, totalEvents } = aggregateTypicalPortion(loc, 4);
+            allBodyHtml += buildEatingStatsLocationHtml(loc);
+            const { byTypeSizeSum, totalEvents } = aggregateEatingStats(loc, 4);
             grandEvents += totalEvents;
             Object.values(byTypeSizeSum).forEach(r => {
                 const key = `${r.type}_${r.num}`;
@@ -4170,7 +4145,7 @@ ${bodyHtml}
                 <thead><tr><th>Тип КО</th><th>Размер</th><th>Средняя порция за кормление</th></tr></thead>
                 <tbody>${grandRows || '<tr><td colspan="3">Нет данных</td></tr>'}</tbody>
             </table>`;
-        showReportModal('Типичная порция — вся коллекция', grandHtml + allBodyHtml, `typical_portion_all_${toDateStr(new Date())}.html`);
+        showReportModal('Статистика поедаемости — вся коллекция', grandHtml + allBodyHtml, `eating_stats_all_${toDateStr(new Date())}.html`);
     }
 
     function openTemperatureReport(locId) {
@@ -4732,7 +4707,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.14', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.15', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
