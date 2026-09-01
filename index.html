@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ExoFeed Control v1.8.13</title>
+    <title>ExoFeed Control v1.8.14</title>
 
     <!-- PWA: установка на главный экран (Android/iOS) -->
     <link rel="manifest" href="manifest.json">
@@ -220,6 +220,9 @@
             border-style: dashed; border-color: #666; color: #888; font-style: italic;
         }
         .res-map-cell .occupant { margin-top: 2px; line-height: 1.3; color: #ddd; word-break: break-word; }
+        /* v1.8.14: тёмная версия .meta (период отчёта и т.п.) для превью — печатная версия стилизована
+           отдельно внутри wrapReportDocument() */
+        .meta { color: #999; font-size: 0.85rem; margin-bottom: 14px; }
 
         /* --- Календарь (v1.5.2) --- */
         .cal-month-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
@@ -290,7 +293,7 @@
     <span id="clock-date">📅 —</span>
     <span id="clock-time">--:--:--</span>
 </div>
-<div class="version-tag">v1.8.13-alpha | Almaty Zoo Edition</div>
+<div class="version-tag">v1.8.14-alpha | Almaty Zoo Edition</div>
 
 <div id="global-pending-actions"></div>
 
@@ -642,6 +645,16 @@
     </div>
 </div>
 
+<div id="modal-ko-need-date" class="modal">
+    <div class="modal-content">
+        <h4>📦 Потребность в КО</h4>
+        <p style="font-size:0.8rem; color:#aaa; margin-top:-8px;">Отчёт строится за 28 дней, отсчитанных назад от указанной даты (включительно). Учитывается всё предложенное количество КО, независимо от того, съедено или нет.</p>
+        <div class="form-group"><label>Отчёт по состоянию на</label><input type="date" id="ko-need-date"></div>
+        <button class="btn-main" onclick="generateKONeedReport()">Сформировать отчёт</button>
+        <button class="btn-sec" onclick="closeModals()">Отмена</button>
+    </div>
+</div>
+
 <div id="modal-transfer" class="modal">
     <div class="modal-content">
         <h4>Переселение особи</h4>
@@ -785,6 +798,8 @@
     <div onclick="openArchive()" class="nav-item">📁 Архив</div>
     <div onclick="openIncubationReport()" class="nav-item">🥚 Инкубация</div>
     <div onclick="openResidentMapReportAll()" class="nav-item">🗺 Карта (вся коллекция)</div>
+    <div onclick="openKONeedReportAll()" class="nav-item">📦 Потребность в КО</div>
+    <div onclick="openTypicalPortionReport(null)" class="nav-item">📦 Типичная порция</div>
     <div onclick="triggerImport()" class="nav-item">📂 Импорт</div>
     <div onclick="exportData()" class="nav-item">💾 Бэкап</div>
     <div onclick="wipeDatabase()" class="nav-item edit-ui" style="color:var(--red);">🗑️ Очистить БД</div>
@@ -1406,12 +1421,12 @@
     ];
 
     let db = [];
-    const CURRENT_DB_KEY = 'exofeed_db_v1.8.13';
+    const CURRENT_DB_KEY = 'exofeed_db_v1.8.14';
     // ВАЖНО: 'exofeed_db_v1.4.12' добавлен в список ключей для чтения,
     // т.к. в версии 1.4.12 данные сохранялись под этим ключом, но никогда не читались обратно при загрузке (баг).
     // Этот список — то, что гарантирует непрерывность базы при каждом обновлении версии (в т.ч. при замене
     // файла на GitHub Pages): каждая новая версия добавляет ключ предыдущей сюда, а не создаёт базу с нуля.
-    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.12', 'exofeed_db_v1.8.11', 'exofeed_db_v1.8.10', 'exofeed_db_v1.8.9', 'exofeed_db_v1.8.8', 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
+    const legacyKeys = [CURRENT_DB_KEY, 'exofeed_db_v1.8.13', 'exofeed_db_v1.8.12', 'exofeed_db_v1.8.11', 'exofeed_db_v1.8.10', 'exofeed_db_v1.8.9', 'exofeed_db_v1.8.8', 'exofeed_db_v1.8.7', 'exofeed_db_v1.8.6', 'exofeed_db_v1.8.5', 'exofeed_db_v1.8.4', 'exofeed_db_v1.8.3', 'exofeed_db_v1.8.2', 'exofeed_db_v1.8.1', 'exofeed_db_v1.8.0', 'exofeed_db_v1.7.0', 'exofeed_db_v1.6.0', 'exofeed_db_v1.5.10', 'exofeed_db_v1.5.9', 'exofeed_db_v1.5.8', 'exofeed_db_v1.5.7', 'exofeed_db_v1.5.6', 'exofeed_db_v1.5.5', 'exofeed_db_v1.5.4', 'exofeed_db_v1.5.3', 'exofeed_db_v1.5.2', 'exofeed_db_v1.5.1', 'exofeed_db_v1.5.0', 'exofeed_db_v1.4.12', 'exofeed_db_v1.4.11', 'exofeed_db_v1.4.10', 'exofeed_db_v1.4.9', 'exofeed_db_v1.4.8', 'exofeed_db_v1.4.7', 'exofeed_db_v1.4.6', 'exofeed_db_v1.4.5', 'exofeed_db_v1.4.4', 'exofeed_db_v1.4.3', 'exofeed_db_v1.4.2', 'exofeed_core_v1.4.1', 'exofeed_core_v1.4.0', 'exofeed_db'];
     for (let key of legacyKeys) {
         let oldData = localStorage.getItem(key);
         if (oldData) { try { db = JSON.parse(oldData); break; } catch(e) {} }
@@ -3452,7 +3467,9 @@
         if(Object.keys(summary).length === 0 && journalRowsHtml === '') { 
             container.innerHTML = '<p>В этой комнате еще нет записей о съеденных кормах.</p>'
                 + `<button class="btn-main" style="background:#00838f; margin-top:10px;" onclick="openTemperatureReport(${locId})">🌡 Отчёт по температуре (HTML)</button>`
-                + `<button class="btn-main" style="background:#37474f;" onclick="openResidentMapReport(${locId})">🗺 Карта расселения (HTML)</button>`;
+                + `<button class="btn-main" style="background:#37474f;" onclick="openResidentMapReport(${locId})">🗺 Карта расселения (HTML)</button>`
+                + `<button class="btn-main" style="background:#6a1b9a;" onclick="openKONeedReport(${locId})">📦 Потребность в КО (HTML)</button>`
+                + `<button class="btn-main" style="background:#6a1b9a;" onclick="openTypicalPortionReport(${locId})">📦 Типичная порция (HTML)</button>`;
         } else {
             let html = `<h5 style="color:var(--blue); margin-bottom:5px;">📊 1. Сводный расход КО по типам</h5>`;
             html += '<table class="stat-table"><thead><tr><th>Размер КО</th><th>Кол-во</th><th>Биомасса</th></tr></thead><tbody>';
@@ -3476,6 +3493,8 @@
             html += `<button class="btn-main" style="background:#37474f;" onclick="openFullLocationReport(${locId})">📚 Полный отчёт по всем животным (HTML)</button>`;
             html += `<button class="btn-main" style="background:#00838f;" onclick="openTemperatureReport(${locId})">🌡 Отчёт по температуре (HTML)</button>`;
             html += `<button class="btn-main" style="background:#37474f;" onclick="openResidentMapReport(${locId})">🗺 Карта расселения (HTML)</button>`;
+            html += `<button class="btn-main" style="background:#6a1b9a;" onclick="openKONeedReport(${locId})">📦 Потребность в КО (HTML)</button>`;
+            html += `<button class="btn-main" style="background:#6a1b9a;" onclick="openTypicalPortionReport(${locId})">📦 Типичная порция (HTML)</button>`;
             container.innerHTML = html;
         }
         showModal('modal-stats');
@@ -3954,6 +3973,204 @@ ${bodyHtml}
                 <tbody>${overviewRows || '<tr><td colspan="4">Локаций нет</td></tr>'}</tbody>
             </table>`;
         showReportModal('Карта расселения — вся коллекция', overviewHtml + bodyHtml, `map_all_${new Date().toISOString().slice(0, 10)}.html`);
+    }
+
+    // ==================== ПОТРЕБНОСТЬ В КО (v1.8.14) ====================
+    // Два отдельных отчёта: "за период" (28 дней назад от указанной даты, метрика — ПРЕДЛОЖЕНО, а не расход)
+    // и "типичная порция" (последние до 4 кормлений на каждое животное, без привязки ко времени).
+
+    function formatDateDMY_(ms) {
+        const d = new Date(ms);
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+    }
+
+    // Считает ПРЕДЛОЖЕННОЕ количество (log.count) в диапазоне дат, включая ещё не разрешённые
+    // "Оставлен на ночь" — в отличие от aggregateFeedingData(), который их из сводки исключает и
+    // считает съедено/расход, а не то, сколько физически выдали.
+    function aggregateOfferedKO(loc, startMs, endMs) {
+        let bySpecies = {}, byTypeSize = {};
+        loc.blocks.forEach(block => {
+            if (block.type === INCUBATOR_BLOCK_TYPE) return;
+            getBlockCells(block).forEach(cell => {
+                if (cell.isService) return;
+                (cell.animals || []).forEach(a => {
+                    (a.feed_logs || []).forEach(log => {
+                        const ts = Number(log.timestamp) || 0;
+                        if (ts < startMs || ts > endMs) return;
+                        const key = `${log.type}_${log.sizeNum}`;
+                        if (!byTypeSize[key]) byTypeSize[key] = { type: log.type, num: log.sizeNum, title: log.sizeTitle, offered: 0 };
+                        byTypeSize[key].offered += log.count;
+                        if (!bySpecies[a.species]) bySpecies[a.species] = {};
+                        if (!bySpecies[a.species][key]) bySpecies[a.species][key] = { type: log.type, num: log.sizeNum, title: log.sizeTitle, offered: 0 };
+                        bySpecies[a.species][key].offered += log.count;
+                    });
+                });
+            });
+        });
+        return { bySpecies, byTypeSize };
+    }
+
+    function sortTypeSizeEntries_(entries) {
+        return entries.sort((a, b) => (a.type || '').localeCompare(b.type || '') || (a.num - b.num));
+    }
+
+    function buildKONeedLocationHtml(loc, startMs, endMs, weeks) {
+        const { bySpecies, byTypeSize } = aggregateOfferedKO(loc, startMs, endMs);
+        let speciesRows = '';
+        Object.keys(bySpecies).sort().forEach(species => {
+            sortTypeSizeEntries_(Object.values(bySpecies[species])).forEach(r => {
+                speciesRows += `<tr><td>${species}</td><td>${FEED_TYPE_LABELS[r.type] || r.type}</td><td>№${r.num} ${r.title}</td><td>${r.offered}</td><td>${(r.offered / weeks).toFixed(1)}</td></tr>`;
+            });
+        });
+        let totalRows = '';
+        sortTypeSizeEntries_(Object.values(byTypeSize)).forEach(r => {
+            totalRows += `<tr><td>${FEED_TYPE_LABELS[r.type] || r.type}</td><td>№${r.num} ${r.title}</td><td>${r.offered}</td><td>${(r.offered / weeks).toFixed(1)}</td></tr>`;
+        });
+        return `
+            <div class="loc-section">
+                <h2>${loc.name}</h2>
+                <h3>По видам животных</h3>
+                <table class="rep-table">
+                    <thead><tr><th>Вид</th><th>Тип КО</th><th>Размер</th><th>Предложено за период</th><th>В неделю (сред.)</th></tr></thead>
+                    <tbody>${speciesRows || '<tr><td colspan="5">Нет данных</td></tr>'}</tbody>
+                </table>
+                <h3>Итого по локации (для закупки)</h3>
+                <table class="rep-table">
+                    <thead><tr><th>Тип КО</th><th>Размер</th><th>Предложено за период</th><th>В неделю (сред.)</th></tr></thead>
+                    <tbody>${totalRows || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
+                </table>
+            </div>`;
+    }
+
+    let koNeedReportLocId = null; // null = вся коллекция сразу
+    function openKONeedReport(locId) {
+        koNeedReportLocId = locId;
+        document.getElementById('ko-need-date').value = toDateStr(new Date());
+        showModal('modal-ko-need-date');
+    }
+    function openKONeedReportAll() { openKONeedReport(null); }
+
+    function generateKONeedReport() {
+        const dateStr = document.getElementById('ko-need-date').value;
+        const baseDate = dateStr ? new Date(dateStr + 'T23:59:59.999') : new Date();
+        const endMs = baseDate.getTime();
+        const startMs = endMs - 27 * 86400000; // 28 дней включительно (сегодня + 27 назад)
+        const weeks = 28 / 7; // ровно 4, т.к. окно всегда 28 дней по построению
+        const periodLabel = `Период: ${formatDateDMY_(startMs)} – ${formatDateDMY_(endMs)} (28 дней)`;
+        closeModals();
+
+        if (koNeedReportLocId !== null) {
+            const loc = db.find(l => l.id === koNeedReportLocId);
+            if (!loc) return;
+            const bodyHtml = `<p class="meta">${periodLabel}</p>` + buildKONeedLocationHtml(loc, startMs, endMs, weeks);
+            showReportModal(`Потребность в КО — ${loc.name}`, bodyHtml, `ko_need_${loc.name}_${toDateStr(new Date())}.html`);
+        } else {
+            let allBodyHtml = '';
+            let grandTotal = {};
+            db.forEach(loc => {
+                allBodyHtml += buildKONeedLocationHtml(loc, startMs, endMs, weeks);
+                const { byTypeSize } = aggregateOfferedKO(loc, startMs, endMs);
+                Object.values(byTypeSize).forEach(r => {
+                    const key = `${r.type}_${r.num}`;
+                    if (!grandTotal[key]) grandTotal[key] = { type: r.type, num: r.num, title: r.title, offered: 0 };
+                    grandTotal[key].offered += r.offered;
+                });
+            });
+            let grandRows = '';
+            sortTypeSizeEntries_(Object.values(grandTotal)).forEach(r => {
+                grandRows += `<tr><td>${FEED_TYPE_LABELS[r.type] || r.type}</td><td>№${r.num} ${r.title}</td><td>${r.offered}</td><td>${(r.offered / weeks).toFixed(1)}</td></tr>`;
+            });
+            const grandHtml = `
+                <h2>Итого по всей коллекции (для закупки)</h2>
+                <table class="rep-table">
+                    <thead><tr><th>Тип КО</th><th>Размер</th><th>Предложено за период</th><th>В неделю (сред.)</th></tr></thead>
+                    <tbody>${grandRows || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
+                </table>`;
+            const bodyHtml = `<p class="meta">${periodLabel}</p>` + grandHtml + allBodyHtml;
+            showReportModal('Потребность в КО — вся коллекция', bodyHtml, `ko_need_all_${toDateStr(new Date())}.html`);
+        }
+    }
+
+    // --- Типичная порция: последние (до) N кормлений на КАЖДОЕ животное отдельно, без привязки ко времени ---
+    function aggregateTypicalPortion(loc, n) {
+        let bySpecies = {}, eventsBySpecies = {}, byTypeSizeSum = {}, totalEvents = 0;
+        loc.blocks.forEach(block => {
+            if (block.type === INCUBATOR_BLOCK_TYPE) return;
+            getBlockCells(block).forEach(cell => {
+                if (cell.isService) return;
+                (cell.animals || []).forEach(a => {
+                    const logs = (a.feed_logs || []).slice()
+                        .sort((x, y) => (Number(y.timestamp) || 0) - (Number(x.timestamp) || 0))
+                        .slice(0, n);
+                    if (logs.length === 0) return;
+                    eventsBySpecies[a.species] = (eventsBySpecies[a.species] || 0) + logs.length;
+                    totalEvents += logs.length;
+                    logs.forEach(log => {
+                        const key = `${log.type}_${log.sizeNum}`;
+                        if (!bySpecies[a.species]) bySpecies[a.species] = {};
+                        if (!bySpecies[a.species][key]) bySpecies[a.species][key] = { type: log.type, num: log.sizeNum, title: log.sizeTitle, sum: 0 };
+                        bySpecies[a.species][key].sum += log.count;
+                        if (!byTypeSizeSum[key]) byTypeSizeSum[key] = { type: log.type, num: log.sizeNum, title: log.sizeTitle, sum: 0 };
+                        byTypeSizeSum[key].sum += log.count;
+                    });
+                });
+            });
+        });
+        return { bySpecies, eventsBySpecies, byTypeSizeSum, totalEvents };
+    }
+
+    function buildTypicalPortionLocationHtml(loc) {
+        const { bySpecies, eventsBySpecies } = aggregateTypicalPortion(loc, 4);
+        let speciesRows = '';
+        Object.keys(bySpecies).sort().forEach(species => {
+            const events = eventsBySpecies[species] || 0;
+            sortTypeSizeEntries_(Object.values(bySpecies[species])).forEach(r => {
+                const avg = events > 0 ? (r.sum / events).toFixed(2) : '—';
+                speciesRows += `<tr><td>${species}</td><td>${FEED_TYPE_LABELS[r.type] || r.type}</td><td>№${r.num} ${r.title}</td><td>${avg}</td></tr>`;
+            });
+        });
+        return `
+            <div class="loc-section">
+                <h2>${loc.name}</h2>
+                <table class="rep-table">
+                    <thead><tr><th>Вид</th><th>Тип КО</th><th>Размер</th><th>Средняя порция за кормление</th></tr></thead>
+                    <tbody>${speciesRows || '<tr><td colspan="4">Нет данных</td></tr>'}</tbody>
+                </table>
+            </div>`;
+    }
+
+    function openTypicalPortionReport(locId) {
+        if (locId !== null) {
+            const loc = db.find(l => l.id === locId);
+            if (!loc) return;
+            showReportModal(`Типичная порция — ${loc.name}`, buildTypicalPortionLocationHtml(loc), `typical_portion_${loc.name}_${toDateStr(new Date())}.html`);
+            return;
+        }
+        let allBodyHtml = '';
+        let grandSum = {}, grandEvents = 0;
+        db.forEach(loc => {
+            allBodyHtml += buildTypicalPortionLocationHtml(loc);
+            const { byTypeSizeSum, totalEvents } = aggregateTypicalPortion(loc, 4);
+            grandEvents += totalEvents;
+            Object.values(byTypeSizeSum).forEach(r => {
+                const key = `${r.type}_${r.num}`;
+                if (!grandSum[key]) grandSum[key] = { type: r.type, num: r.num, title: r.title, sum: 0 };
+                grandSum[key].sum += r.sum;
+            });
+        });
+        let grandRows = '';
+        sortTypeSizeEntries_(Object.values(grandSum)).forEach(r => {
+            const avg = grandEvents > 0 ? (r.sum / grandEvents).toFixed(2) : '—';
+            grandRows += `<tr><td>${FEED_TYPE_LABELS[r.type] || r.type}</td><td>№${r.num} ${r.title}</td><td>${avg}</td></tr>`;
+        });
+        const grandHtml = `
+            <h2>Итого по всей коллекции</h2>
+            <table class="rep-table">
+                <thead><tr><th>Тип КО</th><th>Размер</th><th>Средняя порция за кормление</th></tr></thead>
+                <tbody>${grandRows || '<tr><td colspan="3">Нет данных</td></tr>'}</tbody>
+            </table>`;
+        showReportModal('Типичная порция — вся коллекция', grandHtml + allBodyHtml, `typical_portion_all_${toDateStr(new Date())}.html`);
     }
 
     function openTemperatureReport(locId) {
@@ -4515,7 +4732,7 @@ ${bodyHtml}
     function downloadBackupFile(dbData, archiveData, clutchArchiveData, prefix) {
         const now = new Date(); const pad = (n) => String(n).padStart(2, '0');
         const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-        const backup = { __exofeedBackup: true, version: 'v1.8.13', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
+        const backup = { __exofeedBackup: true, version: 'v1.8.14', savedAt: Date.now(), db: dbData, archive: archiveData, clutchArchive: clutchArchiveData };
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: "application/json"}));
         a.download = `exofeed_${prefix}_${timestamp}.json`; a.click();
